@@ -62,3 +62,14 @@
 - 公开 CI 扩展为29项便携测试及脚本语法检查；完整模型与个人文库留在本机验证。
 - 本地报告：`data/validation/web-tests.log`、`web-regression.log`、`summary.json`、`retrieval.json`、`mcp.json`。保留复现测试和最终报告，清理浏览器测试的合成上传及临时预览服务。
 - 没有新增第三方依赖或付费云端 API；网页界面支持本机单用户证据检索，生成式分析继续由 MCP 客户端完成。
+
+
+## Windows 原生适配 — 2026-11-02
+
+- 新增 Windows 双击启动器和跨平台运行辅助模块，覆盖原生文件锁、进程树清理、虚拟环境路径、临时 PDF 访问、Windows 保留文件名及 UTF-8 数据/日志。既有主配置、Zotero 数据、个人索引及客户端注册未改动。
+- 本机34项便携/原生测试：33通过，Windows PowerShell 专项按平台跳过；2项真实 PDF/网页流程通过。现有个人文库28项检查、8个原文锚点（关键词与混合均8/8）和9个MCP工具检查通过，文库仍为125条文献、76份PDF、1077页。
+- 原生 Windows 基础测试同样为33通过、1项POSIX命令引号测试按平台跳过；包含真实进程间锁竞争、异常退出后释放、后台后代进程结束、禁用Python UTF-8模式时的中文持久化，以及PowerShell对中文/空格/单引号路径的实际参数传递。
+- 首轮 Windows 全新启动器安装、公开模型下载和网页完整流程通过；CLI流程在首次MCP检索超时。加入阶段日志后，独立复现确认握手、工具列表、工作流和状态查询均正常，首次混合检索阻塞。该模式与[上游数值库延迟导入问题](https://github.com/modelcontextprotocol/python-sdk/issues/2832)一致，改为在Windows stdio开始读取前预导入数值依赖，模型权重仍按需加载。
+- 最终[原生CI验证](https://github.com/FrankPan-30/epilepsy-research-rag/actions/runs/41439404149)全部通过：Windows全新BAT启动器/依赖安装、固定模型下载、2项真实PDF/网页/MCP流程，以及Windows和Ubuntu各34项测试（各33通过、1项跨平台专项跳过）。修复未延长超时或跳过首次MCP检索；相同失败流程在预导入后完整通过。
+- 本地复现材料保存在 `data/validation/windows-*.log`，不入Git。测试文库均为临时合成PDF，运行后清理；公开CI未上传论文、索引、模型或测试产物。采用公开仓库标准Windows/Ubuntu runner，无付费AI API或新增直接第三方依赖。
+- Windows CI为托管Windows Server x64；Windows 10/11个人桌面、所有MCP客户端GUI及ARM64尚未逐一验证。此次提供Python源码启动器，仍需Python3.12，尚未提供捆绑运行时的EXE安装包。

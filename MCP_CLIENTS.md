@@ -6,6 +6,8 @@ Build the library first using either PDF-folder or Zotero setup in the [README](
 
 ## Generate settings / 生成配置
 
+On Windows, replace `.venv/bin/python` below with `.\.venv\Scripts\python.exe`; generated JSON uses the native interpreter path, and the Codex command targets PowerShell. See [WINDOWS.md](WINDOWS.md).
+
 Run inside your clone. Each command prints the correct absolute paths and offline-model environment variables; none writes to a client configuration file.
 
 在克隆目录运行下列命令。输出包含绝对路径及离线加载环境变量；仅打印，不会覆盖已有客户端配置。
@@ -20,7 +22,7 @@ Run inside your clone. Each command prints the correct absolute paths and offlin
 
 The Claude Desktop location and local-server launch pattern follow the [MCP SDK host guide](https://py.sdk.modelcontextprotocol.io/get-started/real-host/). Cursor configuration follows its [official MCP guide](https://cursor.com/docs/mcp). VS Code now also offers portable `mcpServers` destinations; `.vscode/mcp.json` is a compatibility destination for its Local harness. Choose the destination appropriate to your harness using [VS Code's official guide](https://code.visualstudio.com/docs/agent-customization/mcp-servers). `--mcp-client generic` prints the portable structure; do not paste a `servers` object into a `mcpServers` destination.
 
-VS Code 也提供以 `mcpServers` 为顶层键的便携配置；`.vscode/mcp.json` 是 Local harness 的兼容入口。请按官方文档选择位置，不要混用 `servers` 和 `mcpServers`。本项目仍以 macOS / Linux 为运行环境，Windows 原生文件锁尚未适配。
+VS Code 也提供以 `mcpServers` 为顶层键的便携配置；`.vscode/mcp.json` 是 Local harness 的兼容入口。请按官方文档选择位置，不要混用 `servers` 和 `mcpServers`。Windows 原生运行已适配：下列 Python 路径改为 `.\.venv\Scripts\python.exe`，生成的配置会自动使用 Windows 路径。Codex 注册命令在 Windows 上输出 PowerShell 格式。详见 [Windows 使用指南](WINDOWS.md)。
 
 Merge only this server entry when other servers already exist. The existing registration stays `epilepsy_research`; use distinct client-side entry names if you register separate clones for different libraries. Moving a clone or recreating its virtual environment may require regenerating the paths. Tool execution permissions are controlled by the client.
 

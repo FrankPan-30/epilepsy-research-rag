@@ -8,7 +8,7 @@
 
 ## 用本地网页开始：无需输入命令
 
-**macOS** 安装 Python **3.12** 后，[下载项目 ZIP](https://github.com/FrankPan-30/epilepsy-research-rag/archive/refs/heads/main.zip) 并解压，双击 **`Start Web.command`**。启动器会安装缺失的依赖并打开浏览器，使用期间保持终端窗口打开。已有安装直接双击同一文件即可。
+安装 Python **3.12** 后，[下载项目 ZIP](https://github.com/FrankPan-30/epilepsy-research-rag/archive/refs/heads/main.zip) 并解压：**Windows x64 双击 `Start Web.bat`，macOS 双击 `Start Web.command`**。启动器会安装缺失的依赖并打开浏览器，使用期间保持终端窗口打开。已有安装直接双击同一文件即可。
 
 1. 点击“选择 PDF”或“选择文件夹”，也可将 PDF 文件拖入导入区。
 2. 首次使用点击“下载本地模型”（免费公开权重，约 470 MB），然后“建立 / 更新索引”。
@@ -22,7 +22,7 @@
 
 网页导入的副本与索引单独保存在 `data/web/`。“现有文库”可查询原有 CLI/Zotero 索引，现有配置继续保留。两个文库都不上传 GitHub。网页仅监听本机 `127.0.0.1`，无 API key 和额外云端费用；此界面提供证据检索与原文核查，生成式回答继续由 MCP 客户端完成。
 
-Linux 或命令行用户可运行 `bash start_web.sh`；已有环境也可运行 `.venv/bin/python web_app.py`。详细安装、存储、常见问题及网页文库的可选 MCP 接入见 [网页使用指南 / Web UI guide](WEB_UI.md)。
+Windows 首次安装和 PowerShell 命令见 [Windows 使用指南](WINDOWS.md)。Linux 或命令行用户可运行 `bash start_web.sh`；已有环境也可运行 `.venv/bin/python web_app.py`。详细安装、存储、常见问题及网页文库的可选 MCP 接入见 [网页使用指南 / Web UI guide](WEB_UI.md)。
 
 ## 先试用：无需论文、依赖安装或 API key
 
@@ -30,7 +30,7 @@ Linux 或命令行用户可运行 `bash start_web.sh`；已有环境也可运行
 
 ## 首次安装或换电脑
 
-完整流程已在 macOS Apple Silicon、Python 3.12 上验证；便携 CI 在 Ubuntu 运行。Windows 原生环境尚未适配（文件锁使用 `fcntl`）。首次安装需要联网下载依赖与公开模型，运行时离线加载。
+运行目标为 Windows 10/11 x64、macOS 和 Linux，使用 Python 3.12。Windows 原生 CI 验证全新依赖安装、启动器及完整合成 PDF/网页/MCP 流程；macOS Apple Silicon 已验证完整流程，Ubuntu 执行便携测试。Windows 桌面交互与各 MCP 客户端界面、每种 Linux 发行版尚未逐一验证。下列命令采用 macOS/Linux 路径，Windows 对应命令见 [Windows 使用指南](WINDOWS.md)。首次安装需要联网下载依赖与公开模型，运行时离线加载。
 
 ```bash
 git clone https://github.com/FrankPan-30/epilepsy-research-rag.git
@@ -163,7 +163,7 @@ GitHub 保存程序、工作流和重建材料；`sync` 更新本机知识库。
 无需私人文库的配置、PDF 导入与记录测试，仅依赖 PyMuPDF 和标准库：
 
 ```bash
-.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
+.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests test_web test_runtime -v
 ```
 
 安装完整依赖和本地模型后，运行 `.venv/bin/python -m unittest test_pdf_pipeline test_web_pipeline -v`：在临时克隆中自动生成合成 PDF，检查真实解析、混合检索、增量更新、MCP 页码/图像工具及网页上传/建库/检索/原文流程，不读取 Zotero、不修改当前文库。运行 `.venv/bin/python check_mcp.py` 可检查自己的已建索引。

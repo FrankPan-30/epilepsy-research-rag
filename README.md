@@ -14,7 +14,7 @@ A local literature-retrieval toolkit built around an epilepsy-prediction researc
 
 ## Start with the local web interface
 
-On **macOS**, install Python **3.12**, download and unzip this repository ([ZIP](https://github.com/FrankPan-30/epilepsy-research-rag/archive/refs/heads/main.zip)), then double-click **`Start Web.command`**. The launcher installs missing dependencies and opens your browser. Keep its terminal window open while using the app. Existing installations can use the same launcher.
+Install Python **3.12**, download and unzip this repository ([ZIP](https://github.com/FrankPan-30/epilepsy-research-rag/archive/refs/heads/main.zip)), then double-click **`Start Web.bat` on Windows x64** or **`Start Web.command` on macOS**. The launcher installs missing dependencies and opens your browser. Keep its terminal window open while using the app. Existing installations can use the same launcher.
 
 1. Choose PDFs or a folder, or drag PDF files into the import area.
 2. On first use, click **Download local model** (free public weights, about 470 MB), then **Build / update index**.
@@ -28,7 +28,7 @@ Switch **English / 中文** at the top right; the preference is remembered. Cont
 
 Web imports are copied into a separate local library under `data/web/`. **Existing library** lets you search your current CLI/Zotero index without changing it. Both libraries stay out of Git. The UI runs only at `127.0.0.1`; no API key or paid cloud service is used. It retrieves evidence and displays sources; answer generation remains available through your MCP client.
 
-For Linux or an existing terminal workflow, run `bash start_web.sh`, or `.venv/bin/python web_app.py` after installing dependencies. Detailed setup, storage, troubleshooting and optional MCP access to web imports: [Web UI guide / 网页使用指南](WEB_UI.md).
+Windows setup and PowerShell commands: [Windows guide / Windows 使用指南](WINDOWS.md). For Linux or an existing terminal workflow, run `bash start_web.sh`, or `.venv/bin/python web_app.py` after installing dependencies. Detailed setup, storage, troubleshooting and optional MCP access to web imports: [Web UI guide / 网页使用指南](WEB_UI.md).
 
 ## Try it without a Zotero library
 
@@ -87,7 +87,7 @@ Defaults: `intfloat/multilingual-e5-small`, 420-token chunks, 45-token overlap, 
 
 ## Import your papers
 
-The complete pipeline has been exercised on **macOS Apple Silicon with Python 3.12**. Portable CI checks run on Ubuntu. Native Windows is not supported yet because the build lock uses `fcntl`; the full pipeline has not been validated on every Linux environment.
+Supported targets are **Windows 10/11 x64, macOS and Linux with Python 3.12**. Native Windows CI verifies fresh dependency installation, the launcher and complete synthetic PDF/web/MCP pipelines. The complete pipeline is also tested on macOS Apple Silicon; Ubuntu runs portable checks. Windows desktop/client UIs and every Linux distribution have not each been exercised. The commands below use macOS/Linux paths; Windows equivalents are in [WINDOWS.md](WINDOWS.md).
 
 ```bash
 python3 -m venv .venv
@@ -200,7 +200,7 @@ Run the public checks:
 python3 demo.py --check
 # PyMuPDF is the only external dependency needed for these unit tests.
 python3 -m pip install pymupdf==1.26.7
-python3 -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
+python3 -m unittest tests.UnitTests tests.PDFSourceTests test_web test_runtime -v
 ```
 
 With full dependencies and the local model installed, `.venv/bin/python -m unittest test_pdf_pipeline test_web_pipeline -v` creates synthetic PDFs in a disposable clone and checks real parsing, hybrid search, incremental updates, MCP page/image tools, and the web upload/build/search/source workflow. It does not use Zotero or change your active library. `.venv/bin/python check_mcp.py` checks your own indexed PDFs through the stdio protocol.

@@ -4,9 +4,9 @@
 
 ### Open and use
 
-On macOS, install Python **3.12** from [python.org](https://www.python.org/downloads/), unzip the project or update your clone, and double-click **Start Web.command**. The launcher creates `.venv` and installs missing dependencies from `requirements.lock.txt`. The initial installation needs an internet connection and may take several minutes. This is a source-based launcher; it is not a signed desktop application.
+Install Python **3.12** from [python.org](https://www.python.org/downloads/), unzip the project or update your clone, then double-click **Start Web.bat** on Windows x64 or **Start Web.command** on macOS. The launcher creates `.venv` and installs missing dependencies from `requirements.lock.txt`. The initial installation needs an internet connection and may take several minutes. This is a source-based launcher; it is not a bundled Python runtime or signed desktop application.
 
-On Linux, run `bash start_web.sh`. An existing environment can start directly with `.venv/bin/python web_app.py`. Native Windows is not yet supported. The full pipeline has been tested on macOS Apple Silicon; Ubuntu CI covers portable tests.
+On Linux, run `bash start_web.sh`. An existing environment can start directly with `.venv/bin/python web_app.py`. See [WINDOWS.md](WINDOWS.md) for Windows setup and PowerShell paths. Full pipelines are tested on macOS Apple Silicon and in native Windows CI; Ubuntu CI covers portable tests.
 
 Keep the launcher window open. It opens a browser at `127.0.0.1:8765` with a temporary session link. If automatic opening fails, copy the **full link** printed there. Use Ctrl+C in that window to stop the app. To choose another port, use `bash start_web.sh --port 8766`.
 
@@ -63,9 +63,9 @@ There are **no paid API calls** in this interface. Dependencies and model weight
 
 ### 打开与使用
 
-macOS 先安装 [Python 3.12](https://www.python.org/downloads/)，解压项目或更新已有克隆，双击 **Start Web.command**。启动器会创建 `.venv`，根据 `requirements.lock.txt` 安装缺失依赖；首次需联网，可能耗时几分钟。这是源码启动器，尚未打包为签名桌面应用。
+先安装 [Python 3.12](https://www.python.org/downloads/)，解压项目或更新已有克隆，Windows x64 双击 **Start Web.bat**，macOS 双击 **Start Web.command**。启动器会创建 `.venv`，根据 `requirements.lock.txt` 安装缺失依赖；首次需联网，可能耗时几分钟。这是源码启动器，尚未捆绑 Python 运行时或打包为签名桌面应用。
 
-Linux 运行 `bash start_web.sh`；已有环境可直接运行 `.venv/bin/python web_app.py`。Windows 原生环境暂未支持。完整流程在 macOS Apple Silicon 验证，Ubuntu CI 执行便携测试。
+Linux 运行 `bash start_web.sh`；已有环境可直接运行 `.venv/bin/python web_app.py`。Windows 安装和 PowerShell 命令见 [WINDOWS.md](WINDOWS.md)。完整流程在 macOS Apple Silicon 和原生 Windows CI 验证，Ubuntu CI 执行便携测试。
 
 使用期间保持启动窗口打开。浏览器会打开带临时会话的 `127.0.0.1:8765` 地址；未自动打开时，复制窗口中的**完整链接**。在启动窗口按 Ctrl+C 停止。端口冲突可用 `bash start_web.sh --port 8766` 换端口。
 

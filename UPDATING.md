@@ -2,13 +2,13 @@
 
 ## 更新项目代码
 
-仓库位置是运行 RAG 的目录。在该目录操作：
+仓库位置是运行 RAG 的目录。Windows 将下列 `.venv/bin/python` 换为 `.\.venv\Scripts\python.exe`，详见 [WINDOWS.md](WINDOWS.md)。在该目录操作：
 
 ```bash
 git status
 git pull --ff-only
 # 修改代码、工作流或配置模板
-.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
+.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests test_web test_runtime -v
 # 完整依赖和模型已安装时，检查独立 PDF 流程
 .venv/bin/python -m unittest test_pdf_pipeline test_web_pipeline -v
 # 原始 Zotero 开发文库的完整检查（含固定验收 key）
@@ -21,7 +21,7 @@ git push origin main
 
 先处理未提交改动，再拉取其他电脑的更新；不要用强制推送覆盖远端历史。复杂改动可使用 `codex/` 前缀分支，通过 PR 合并。修改依赖时同时更新 `requirements.txt` 和经验证的锁文件；更新检索模型后重新构建索引。
 
-`git push` 是显式操作。公开仓库的 main 推送、PR 及手动触发会运行 GitHub Actions：仅检查合成演示与便携单元测试，使用公开仓库的标准 Ubuntu runner，不下载论文或向量模型，不调用 AI API，不上传构建产物。没有配置自动推送或定时同步。
+`git push` 是显式操作。公开仓库的 main 推送、PR 及手动触发会运行 GitHub Actions：推送和 PR 检查合成演示、便携及原生运行测试，使用公开仓库的标准 Ubuntu/Windows runner，不下载论文或向量模型，不调用 AI API（手动 workflow_dispatch 额外运行全新 Windows 启动器与完整流程，会下载公开模型），不上传构建产物。没有配置自动推送或定时同步。
 
 ## 更新论文知识库
 

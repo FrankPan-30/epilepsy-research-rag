@@ -159,7 +159,7 @@ class App:
             return result,path,len(parsed['pages'])
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='ResearchLibrary/0.4'
+    server_version='ResearchLibrary/0.5'
     def setup(self):super().setup();self.connection.settimeout(30)
     def log_message(self,*args):pass  # Do not log private queries, filenames or launch tokens.
     def error_text(self,message):return ERROR_EN.get(message,message) if self.headers.get('Accept-Language','zh').lower().startswith('en') else message

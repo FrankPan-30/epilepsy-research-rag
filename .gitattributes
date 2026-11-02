@@ -1,0 +1,2 @@
+# CMD launchers use native Windows line endings after checkout.
+*.bat text eol=crlf
