@@ -1,4 +1,14 @@
 """Read-only evidence tools. Answer generation stays in the calling MCP client."""
+import contextlib,sys
+
+# On Windows, loading BLAS-backed libraries while stdio is being read can block
+# on the stdin pipe. Import before the transport starts; weights remain lazy.
+# https://github.com/modelcontextprotocol/python-sdk/issues/2832
+if sys.platform=='win32':
+    with contextlib.redirect_stdout(sys.stderr):
+        import scipy.sparse.linalg
+        from sentence_transformers import SentenceTransformer
+
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import ToolAnnotations
 from rag import Library, ROOT
