@@ -338,8 +338,9 @@ def build(skip_vectors=False):
         print(dumps(manifest))
 
 class Library:
-    def __init__(self):
-        self.folder=DATA/json.loads((DATA/'current.json').read_text())['generation']
+    def __init__(self,data_dir=None):
+        self.data=Path(data_dir).resolve() if data_dir is not None else DATA
+        self.folder=self.data/json.loads((self.data/'current.json').read_text())['generation']
         self.db=sqlite3.connect((self.folder/'library.sqlite').as_uri()+'?mode=ro',uri=True,check_same_thread=False)
         self.db.row_factory=sqlite3.Row
         self.vectors=None
@@ -394,7 +395,11 @@ class Library:
             q=model().encode(['query: '+query],normalize_embeddings=True)[0]
             keys=np.array(list(rows),dtype=int)
             if len(keys):
-                scores=self.vectors[keys-1]@q; order=np.argsort(-scores)[:pool]
+                # Explicit contraction avoids spurious Accelerate matmul warnings
+                # on Apple Silicon with the pinned NumPy (numpy/numpy#28687).
+                scores=np.einsum('ij,j->i',self.vectors[keys-1],q,optimize=False)
+                if not np.isfinite(scores).all():raise ValueError('Non-finite similarity scores; check model and index')
+                order=np.argsort(-scores)[:pool]
                 ranked.append([int(keys[i]) for i in order]);dense_scores={int(keys[i]):float(scores[i]) for i in order}
         elif mode!='keyword':raise ValueError('mode must be hybrid/keyword')
         fused=collections.defaultdict(float)
@@ -413,10 +418,10 @@ class Library:
         r=self.db.execute('SELECT metadata FROM papers WHERE key=?',(key,)).fetchone()
         if r is None:raise ValueError('Unknown paper key')
         card=next((x for x in json.loads((self.folder/'cards.json').read_text()) if x['paper_key']==key),None)
-        reviewed=DATA/'reviews'/(key+'.json')
+        reviewed=self.data/'reviews'/(key+'.json')
         review=json.loads(reviewed.read_text()) if reviewed.exists() else None
         if review:
-            review['matches_indexed_pdf_version']=all(json.loads((DATA/'parsed'/(x['attachment_key']+'.json')).read_text())['sha256']==x['pdf_sha256'] for x in review['claims'])
+            review['matches_indexed_pdf_version']=all(json.loads((self.data/'parsed'/(x['attachment_key']+'.json')).read_text())['sha256']==x['pdf_sha256'] for x in review['claims'])
         return {'metadata':json.loads(r[0]),'evidence_map':card,'checked_method_notes':review,'generation':self.folder.name}
     def catalog(self,query='',field=None):
         cards={c['paper_key']:c for c in json.loads((self.folder/'cards.json').read_text())}
@@ -433,7 +438,7 @@ class Library:
         # Resolve only attachments in the indexed collection, never arbitrary paths.
         r=self.db.execute('SELECT citation FROM chunks WHERE attachment_key=? LIMIT 1',(attachment_key,)).fetchone()
         if not r:raise ValueError('Attachment is outside the indexed corpus')
-        cite=json.loads(r[0]);parsed=json.loads((DATA/'parsed'/(attachment_key+'.json')).read_text())
+        cite=json.loads(r[0]);parsed=json.loads((self.data/'parsed'/(attachment_key+'.json')).read_text())
         if page<1 or page>len(parsed['pages']):raise ValueError('Page out of range')
         return {'citation':{**cite,'pdf_page':page,'zotero_url':f'zotero://open-pdf/library/items/{attachment_key}?page={page}'},'page':parsed['pages'][page-1]}
 

@@ -19,7 +19,7 @@ git push origin main
 
 先处理未提交改动，再拉取其他电脑的更新；不要用强制推送覆盖远端历史。复杂改动可使用 `codex/` 前缀分支，通过 PR 合并。修改依赖时同时更新 `requirements.txt` 和经验证的锁文件；更新检索模型后重新构建索引。
 
-`git push` 是显式操作。当前没有配置自动推送、定时任务或 GitHub Actions 运行。
+`git push` 是显式操作。公开仓库的 main 推送、PR 及手动触发会运行 GitHub Actions：仅检查合成演示与便携单元测试，使用公开仓库的标准 Ubuntu runner，不下载论文或向量模型，不调用 AI API，不上传构建产物。没有配置自动推送或定时同步。
 
 ## 更新论文知识库
 

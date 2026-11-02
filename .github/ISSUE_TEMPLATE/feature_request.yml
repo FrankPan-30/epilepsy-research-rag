@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a research workflow or technical improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: usecase
+    attributes:
+      label: Research use case
+      description: What task is difficult with the current version?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and validation
+      description: Describe the smallest useful improvement and how to check it.

@@ -1,103 +1,158 @@
-# 癫痫预测科研 RAG
+# Epilepsy Research RAG
 
-本地文献与索引 + Codex 云端分析。优先服务文献检索和方法总结，并支持项目知识、评价规范、模型诊断和实验设计。程序没有调用付费生成或向量 API；模型文件首次公开下载，运行时离线加载。
+**Search your Zotero papers in English or Chinese, inspect page-level evidence, and compare seizure-prediction methods with Codex.**
 
-## 首次安装或换电脑
+[![Portable checks](https://github.com/FrankPan-30/epilepsy-research-rag/actions/workflows/tests.yml/badge.svg)](https://github.com/FrankPan-30/epilepsy-research-rag/actions/workflows/tests.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/downloads/)
 
-当前已验证环境为 macOS Apple Silicon、Python 3.12。运行时使用本地模型，首次安装需要联网下载依赖与公开模型。Windows 原生环境尚未适配（文件锁使用 `fcntl`）。
+**English** | [简体中文](README.zh-CN.md)
+
+A local literature-retrieval toolkit built around a real epilepsy-prediction research workflow. It keeps your Zotero PDFs, parsed text and retrieval index on your computer, then exposes evidence to Codex through nine read-only MCP tools. Codex performs the synthesis in your chat; retrieved passages sent to it are processed by the cloud model.
+
+> “Compare alarm postprocessing across cross-patient studies. Show the validation protocol, smoothing and threshold rules, false-alarm definition, and original PDF pages.”
+
+## Try it without a Zotero library
+
+With Python 3.12 on macOS or Linux:
 
 ```bash
 git clone https://github.com/FrankPan-30/epilepsy-research-rag.git
 cd epilepsy-research-rag
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.lock.txt
-.venv/bin/python configure.py --zotero-dir "$HOME/Zotero" --collection-name '癫痫预测'
-.venv/bin/python download_model.py
-.venv/bin/python rag.py sync
+python3 demo.py
+python3 demo.py 'LOPOCV validation'
 ```
 
-`configure.py` 创建本机的 `config.json`，后续 Git 更新不会覆盖它。同名集合不唯一时，设置 `collection_key`。已有配置时直接编辑该文件，初始化命令会保护它。
+No package installation, model download or API key is required for this demo. It runs the real keyword-search path against three **synthetic notes**, in a temporary index that is automatically removed. Example output:
 
-接入 Codex：运行下面的命令，复制它输出的 `codex mcp add ...` 命令执行。它会按当前克隆位置生成正确路径。若已有同名连接，先检查现有配置再决定是否更换。
+```text
+SYNTHETIC DEMO | keyword retrieval | no model download | no API call
+Question: 误报后处理中的平滑和阈值
+
+1. Synthetic note: alarm postprocessing [DEMO-ALARM]
+Record false alarm rate together with threshold, smoothing, consecutive confirmation, and refractory period. Compare alarm settings under the same evaluation protocol.
+```
+
+The demo illustrates retrieval mechanics. Real-paper search, embeddings, PDF extraction and MCP require the full setup below.
+
+## What it does
+
+| Research need | Implemented support |
+|---|---|
+| Find methods across languages | SQLite FTS5 keyword search, Chinese-to-English domain expansion, local multilingual E5 embeddings and reciprocal rank fusion |
+| Check an answer against its source | Zotero item/attachment keys, PDF page numbers, source passages, adjacent pages and PDF-page images |
+| Compare evaluation protocols | Candidate evidence maps for validation, prediction horizons, alarm postprocessing, metrics and limitations |
+| Keep evidence types distinct | Separate full text, OCR, metadata-only entries, user notes and project guidance; paper search excludes personal notes by default |
+| Update a growing collection | Manual incremental sync, PDF hashes, cached parsing/embeddings and atomic index generation switches |
+| Record research decisions | Versioned experiment records, separate window/event metrics, and five research workflow guides |
+
+The domain workflow pays particular attention to **within-patient leave-one-seizure-out versus cross-patient leave-one-patient-out**, and to **window metrics versus event sensitivity, FA/h and alarm rules**. Terminology and definitions still need checking in each source paper.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Local Zotero collection] --> B[PDF parsing and selective OCR]
+    B --> C[Page-aware chunks and source metadata]
+    C --> D[Local SQLite FTS5 and E5 vectors]
+    D --> E[Hybrid retrieval]
+    E --> F[CLI or read-only MCP tools]
+    F --> G[Codex cloud synthesis]
+    G --> H[Check citations and original PDF pages]
+```
+
+Defaults: `intfloat/multilingual-e5-small`, 420-token chunks, 45-token overlap, 40 candidates per retrieval route, eight returned chunks and at most three chunks per paper. RRF combines rankings; it is not a neural reranker. Ranking scores are not confidence estimates.
+
+## Use your own Zotero collection
+
+The complete pipeline has been exercised on **macOS Apple Silicon with Python 3.12**. Portable CI checks run on Ubuntu. Native Windows is not supported yet because the build lock uses `fcntl`; the full pipeline has not been validated on every Linux environment.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.lock.txt
+.venv/bin/python configure.py --zotero-dir "$HOME/Zotero" --collection-name 'Epilepsy Prediction'
+.venv/bin/python download_model.py
+.venv/bin/python rag.py sync
+.venv/bin/python rag.py status
+```
+
+Replace `Epilepsy Prediction` with your own Zotero collection name. The collection and its descendants are included. Use `--collection-key YOUR_KEY` if names are ambiguous. Configuration is written to ignored `config.json`; initialization preserves an existing file. The default collection name in the template is `癫痫预测`.
+
+The reader takes a read-only SQLite snapshot of the local Zotero database and never writes to Zotero. Stored PDF attachments are supported. Zotero `attachments:` linked-base paths are not currently resolved. Dependencies and the pinned public embedding model need an initial download; parsing, embedding and retrieval then run locally without a paid API.
+
+### Connect to Codex
 
 ```bash
 .venv/bin/python configure.py --print-mcp
 ```
 
-当前电脑原有项目连接可以继续使用。项目不自动修改全局 Codex 配置。
+Run the printed `codex mcp add` command. It uses the absolute path of your clone. Review an existing connection with the same name before replacing it. The project does not automatically edit your global Codex settings.
 
-## 使用
+Ask Codex to use `epilepsy_research`, for example:
 
-在 Codex 中说：
+> Search my epilepsy research library for alarm postprocessing in cross-patient studies. Compare protocols and cite original PDF pages. Separate paper evidence from proposed experiments.
 
-> 检索我的癫痫预测知识库，总结跨患者研究的报警后处理方法，核对评价协议并引用原文页码。
-
-项目 MCP 名称为 `epilepsy_research`。如当前会话尚未加载 MCP，直接使用以下命令，结果同源。
+### Use the CLI
 
 ```bash
-.venv/bin/python rag.py status
+.venv/bin/python rag.py search 'false alarm smoothing threshold' --limit 8
 .venv/bin/python rag.py search '跨患者预测中的误报和报警后处理' --limit 8
 .venv/bin/python rag.py paper ZOTERO_ITEM_KEY
 .venv/bin/python rag.py read CHUNK_ID --neighbors 1
 .venv/bin/python rag.py catalog --field alarm_postprocessing
+```
+
+Use actual keys and chunk IDs from your results. Keep the returned generation identifier with citations; rerun a search after rebuilding before reusing chunk IDs.
+
+For a systematic comparison, enumerate the catalog and record per-paper coverage. Ranked top-k search alone does not establish that every relevant paper has been reviewed.
+
+### Update code and papers
+
+```bash
+git pull --ff-only
 .venv/bin/python rag.py sync
 ```
 
-`paper` 中填写真实 Zotero 条目 key，`read` 中填写本次检索返回的数字 ID。引用需保留返回的 generation；更新后重新检索，避免旧 chunk ID 对应不同内容。
+Resolve your own uncommitted code changes before pulling. `sync` reuses unchanged parsing and vectors, builds a separate generation, and switches the active index only on success. Old generations remain available until you explicitly clean them up. Code updates and local library updates are separate operations.
 
-## 内容与证据
+See the [Chinese maintenance guide](UPDATING.md) for push, migration and recovery steps. Experiment records are created explicitly with `experiments.py`; templates are plans, not completed results.
 
-- 范围：配置中的 Zotero 集合和全部子集合。按 item key 去重，排除回收站、独立附件和独立笔记；DOI/标题的跨条目重复仍需人工审核。
-- 使用 SQLite 只读事务读取一致快照。此路线是已确认本机 API 无响应时的回退，不直接写 Zotero。
-- PDF 原件继续由 Zotero 保存。解析缓存保存逐页 Markdown、页码、表格/图片位置和 SHA256；首次解析及字段匹配均标记未人工核验。
-- 只有摘要的记录标为 `metadata`；用户笔记与批注明确标记，默认论文搜索不混入个人批注或项目规范。
-- 实验字段是关键词定位的证据目录，而非已经确认的研究分类或自动归一化指标。缺失字段表示尚未定位到证据。
-- `data/reviews/` 保存已对照原文检查的局部方法描述，标明助手核对范围、是否经过人工复核、PDF哈希和原文位置。其状态不扩展到整篇论文；更换PDF后需要重新核对。
-- 原图查看工具 `view_pdf_page` 可核查公式、结构图和表格。公式不保证准确转成 LaTeX；低文本量及疑似图片表格页使用本地 RapidOCR 补充识别，识别文字与位置单独保存并标记需视觉核查。OCR 行文本不作为已恢复的表格列结构。
-- 全文分块遵循章节/页边界，以 E5 tokenizer 控制到 420 tokens、重叠 45 tokens；长表格可能跨块，核对时读取完整页并查看原图。
-- 中英混合检索使用 SQLite FTS5、领域查询扩展、多语言 E5 与 RRF 排序融合。RRF 是排序融合，并非独立神经重排序模型。模型分数不是可信度概率。
-- 每篇最多返回三个候选片段（指定论文时放宽）。复杂问题应多轮检索和展开完整页面。系统比较先枚举全集并逐篇检查，不能把 top-k 当作全部证据。
+## Evidence boundaries and validation
 
-## 四类研究支持
+- Field maps locate keyword-matched passages. They are **candidates for source checking**, not verified study classifications or normalized results.
+- PDF text, formulas and table layout can be imperfect. Selective local OCR saves its own provenance; inspect the PDF image for table columns, equations and model diagrams.
+- Metadata-only records are labeled. Local method-review notes describe the specific checked claims and PDF hashes, rather than certifying an entire paper.
+- The original development corpus contains 125 bibliographic items, 76 PDFs, 1,077 pages and 4,982 chunks. **These private documents and their index are not distributed.**
+- On eight source-anchored development queries, both keyword-only and hybrid retrieval found the target paper within 12 returned chunks: **8/8 for each**. This small tuning set does not measure generated-answer accuracy or demonstrate a hybrid-search advantage. A further 22 review questions are provided but not scored.
 
-`knowledge/` 是项目工作规则，明确标记为非论文证据。五个工作流包括文献检索、项目管理、数据与评价、模型诊断、实验设计。既有训练代码、实验结果和个人文件尚未批量入库。
+This is a research literature tool, not a seizure prediction model or a clinical decision system.
 
-实验记录通过 `experiments.py` 显式保存，按版本保留历史：
+Run the public checks:
 
 ```bash
-.venv/bin/python experiments.py template
-.venv/bin/python experiments.py save /absolute/path/record.json
-.venv/bin/python experiments.py list
+python3 demo.py --check
+# PyMuPDF is the only external dependency needed for these unit tests.
+python3 -m pip install pymupdf==1.26.7
+python3 -m unittest tests.UnitTests -v
 ```
 
-模板只是待填写结构，不代表已完成实验。窗口与事件指标分别存储。保存已完成实验需要代码版本与结果路径。
+With a complete local environment and corpus, run `.venv/bin/python validate.py`. The original corpus tests and `evaluation_cases.json` contain corpus-specific keys; adapt them for your own collection. See [BUILD_REPORT.md](BUILD_REPORT.md) for the original validation record. Full dependency installation on a fresh machine is separate from the small public CI checks.
 
-## 更新与复现
+## Data, costs and licensing
 
-代码更新和文库更新分别管理：GitHub 保存程序、工作流和重建材料；`sync` 更新本机知识库。具体提交、推送、跨电脑恢复步骤见 [UPDATING.md](UPDATING.md)。仓库可持续推送，当前没有自动推送或定时运行。
+PDFs, `data/`, `models/`, `.venv/`, personal configuration and credentials are excluded from Git. Original PDFs stay in Zotero. Keep private notes and unpublished results out of public issues and pull requests.
 
-`sync` 手动读取当前集合：PDF 哈希未变时复用解析，文本和模型版本未变时复用向量。新的索引写入独立 generation，全部完成后原子切换 `data/current.json`。构建失败时原有索引继续可用；并发构建通过文件锁拒绝。
+The toolkit makes no paid embedding, OCR or generation API calls. Codex usage follows your own account arrangement. The included CI uses a standard runner on this public repository, with no model download, paid AI API, or artifact/cache storage.
 
-旧 generation 可作为回滚材料；确认无依赖后再清理。移出集合的条目不会进入新索引；旧版本和缓存仍保留到显式清理。索引是某次快照，`status` 显示完成时间。
+Project source and original synthetic examples are licensed under **[GNU AGPL v3.0](LICENSE)**. Copyright © 2026 FrankPan-30 and contributors. See [third-party components](THIRD_PARTY.md), including the AGPL PDF stack. Papers and user-supplied data retain their own rights.
 
-首次复现：创建独立虚拟环境，安装 `requirements.lock.txt`，运行 `download_model.py` 下载固定 revision 的公开模型，再运行 `sync`。本机 `.venv` 复用了已安装的 PyTorch/NumPy，锁文件包含实际使用版本。
+## Contribute
 
-## 费用和数据边界
+Useful contributions include English workflow translations, redistributable retrieval fixtures, held-out evaluation cases, and Linux installation reports. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [roadmap](ROADMAP.md).
 
-本地解析、向量生成和检索不调用云端 API。Codex 接收到检索证据后在当前聊天中分析。后续若增加独立云端全文提取、OCR或生成服务，必须先向用户说明用途和预计费用。
+- [Report a bug or suggest a feature](https://github.com/FrankPan-30/epilepsy-research-rag/issues/new/choose)
+- [Discuss research workflows](https://github.com/FrankPan-30/epilepsy-research-rag/discussions)
 
-`data/`、`models/`、`.venv/`、`config.json` 和本机 `mcp_config.toml` 均被 Git 忽略。原始 PDF 不复制入代码库。文献正文中的指令不执行。
+If this helps your research, a star makes the project easier for other researchers to discover. Feedback on a real workflow is especially welcome.
 
-## 验证
-
-新克隆没有私人论文，也可以运行无需文库的配置与记录测试：
-
-```bash
-.venv/bin/python -m unittest tests.UnitTests -v
-```
-
-全库测试与检索开发样例需要本机文献。`evaluation_cases.json` 中的条目 key 属于首期文库；换成其他文库后应建立自己的原文锚点案例。
-
-在本仓库目录运行 `.venv/bin/python validate.py` 完成验证。`tests.py` 检查引用定位、分块 token 上限、来源隔离、实验记录校验和离线检索；`evaluate.py` 检查8个附原文锚点的检索案例；`check_mcp.py` 验证实际MCP工具连接、查询和图像返回。另有22个研究验收问题供实际使用中核对，合计30题，尚未把未核对问题计入准确率。报告保存在 `data/validation/`。自动检查与小样本案例只验证相应范围，全文解析、全部字段及科研建议仍需阅读原文和实际实验验证。
-
-方法依据：[E5 模型卡](https://huggingface.co/intfloat/multilingual-e5-small)、[PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM)、[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)。
+Built with [Zotero](https://www.zotero.org/), [PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM), [multilingual E5](https://huggingface.co/intfloat/multilingual-e5-small), [Sentence Transformers](https://github.com/huggingface/sentence-transformers), [RapidOCR](https://github.com/RapidAI/RapidOCR) and the [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk).

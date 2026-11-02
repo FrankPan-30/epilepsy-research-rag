@@ -4,8 +4,19 @@ from pathlib import Path
 from unittest.mock import patch
 import rag, experiments
 import configure
+import demo
 
 class UnitTests(unittest.TestCase):
+    def test_synthetic_demo_isolated_from_personal_corpus(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(rag,'DATA',Path(folder)):
+            result=demo.run_demo()
+            self.assertEqual(result['results'][0]['paper_key'],'DEMO-ALARM')
+            self.assertEqual(result['mode'],'keyword')
+            self.assertTrue(all(r['kind']=='synthetic_demo' and r['citation']['pdf_page'] is None for r in result['results']))
+            self.assertEqual(list(Path(folder).iterdir()),[])
+    def test_synthetic_demo_protocol_and_missing_evidence(self):
+        self.assertEqual(demo.run_demo('LOPOCV validation')['results'][0]['paper_key'],'DEMO-SPLIT')
+        self.assertEqual(demo.run_demo('zzzzunmatchedtoken')['results'],[])
     def test_config_defaults_and_local_override(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
@@ -84,6 +95,15 @@ class CorpusTests(unittest.TestCase):
         q='EEG epilepsy seizure prediction the post-processing stage as a chronology'
         out=self.lib.search(q,limit=8)
         self.assertIn('QRUMQNXJ',[r['paper_key'] for r in out['results']])
+    def test_dense_scores_without_runtime_warnings(self):
+        import math,warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('error',RuntimeWarning)
+            out=self.lib.search('false alarm smoothing threshold',limit=8)
+        self.assertTrue(out['results'])
+        scores=[r['semantic_score'] for r in out['results'] if r['semantic_score'] is not None]
+        self.assertTrue(scores)
+        self.assertTrue(all(math.isfinite(s) and -1.00001<=s<=1.00001 for s in scores))
     def test_catalog_includes_unknown_fields(self):
         out=self.lib.catalog(field='history_information')
         self.assertEqual(sum(not p['key'].startswith('LOCAL:') for p in out['papers']),self.lib.status()['papers'])
