@@ -27,7 +27,14 @@ class PDFPipelineTests(unittest.TestCase):
             duplicate=papers/'z duplicate.PDF';shutil.copy2(original,duplicate)
             env={**os.environ,'HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1','PYTHONDONTWRITEBYTECODE':'1','PYTHONUTF8':'1'}
             def run(*args,success=True):
-                result=subprocess.run([sys.executable,*args],cwd=root,env=env,capture_output=True,text=True,encoding='utf-8',timeout=180)
+                try:result=subprocess.run([sys.executable,*args],cwd=root,env=env,capture_output=True,text=True,encoding='utf-8',timeout=180)
+                except subprocess.TimeoutExpired as exc:
+                    print('Timed out command:',args,file=sys.stderr)
+                    for name in ('stdout','stderr'):
+                        data=getattr(exc,name) or b''
+                        if isinstance(data,bytes):data=data.decode('utf-8',errors='replace')
+                        print(name+': '+data[-12000:],file=sys.stderr,flush=True)
+                    raise
                 if success and result.returncode:self.fail(result.stderr[-8000:])
                 if not success:self.assertNotEqual(result.returncode,0)
                 return result
