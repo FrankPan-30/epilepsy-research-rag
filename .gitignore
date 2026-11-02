@@ -15,7 +15,7 @@ mcp_config.toml
 *.key
 .DS_Store
 
-# Source repository only; rebuild knowledge from local Zotero
+# Source repository only; rebuild knowledge from local PDFs or optional Zotero
 *.[pP][dD][fF]
 *.[pP][dD][fF].json
 .cursor/mcp.json

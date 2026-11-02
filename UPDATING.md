@@ -8,9 +8,9 @@
 git status
 git pull --ff-only
 # 修改代码、工作流或配置模板
-.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests -v
+.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
 # 完整依赖和模型已安装时，检查独立 PDF 流程
-.venv/bin/python -m unittest test_pdf_pipeline -v
+.venv/bin/python -m unittest test_pdf_pipeline test_web_pipeline -v
 # 原始 Zotero 开发文库的完整检查（含固定验收 key）
 .venv/bin/python validate.py
 git diff
@@ -36,7 +36,9 @@ PDF 文件夹或 Zotero 中新增/移除论文、更新附件或元数据后运�
 
 旧配置未指定 `library_source` 时继续按 Zotero 读取。文件夹模式设为 `pdf_folder`，并填写 `pdf_dir`；PDF 内容相同的副本合并，改名保留 ID，修改 PDF 字节产生新 ID。可选的 `*.pdf.json` 元数据文件随原件另行保存。空 PDF 目录会拒绝同步以保护已有索引。
 
-每个克隆目录维护一个活动来源；切换来源后重新 `sync` 会替换活动快照，不自动合并来源。若同时保留两个文库，使用两个独立克隆。客户端调用同一个 MCP 服务，配置说明见 [MCP_CLIENTS.md](MCP_CLIENTS.md)。
+主 CLI/MCP 工作区维护一个活动来源；切换来源后重新 `sync` 会替换活动快照，不自动合并来源。网页导入库独立保存在 `data/web/`，可与主文库同时使用；更多文库可用独立克隆。客户端调用同一个 MCP 服务，配置说明见 [MCP_CLIENTS.md](MCP_CLIENTS.md)。
+
+网页新增 PDF 后，在网页点击“建立 / 更新索引”。备份网页资料时保留 `data/web/uploads/`；换电脑后重新选择 PDF 建库。人工核对记录和实验记录应另外备份，详见 [WEB_UI.md](WEB_UI.md)。
 
 ## 换电脑或恢复
 

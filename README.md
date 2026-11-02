@@ -8,9 +8,27 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A local literature-retrieval toolkit built around an epilepsy-prediction research workflow. **Start with a PDF folder, or optionally connect Zotero.** Parsing, embeddings and retrieval run locally. Use the CLI on its own, or expose evidence through nine read-only MCP tools to Codex or another compatible client. The client handles answer generation; evidence sent to a cloud model is processed by that provider.
+A local literature-retrieval toolkit built around an epilepsy-prediction research workflow. **Start with a PDF folder, or optionally connect Zotero.** Parsing, embeddings and retrieval run locally. Use the bilingual local web interface or CLI, or expose evidence through nine read-only MCP tools to Codex or another compatible client. The client handles answer generation; evidence sent to a cloud model is processed by that provider.
 
 > “Compare alarm postprocessing across cross-patient studies. Show the validation protocol, smoothing and threshold rules, false-alarm definition, and original PDF pages.”
+
+## Start with the local web interface
+
+On **macOS**, install Python **3.12**, download and unzip this repository ([ZIP](https://github.com/FrankPan-30/epilepsy-research-rag/archive/refs/heads/main.zip)), then double-click **`Start Web.command`**. The launcher installs missing dependencies and opens your browser. Keep its terminal window open while using the app. Existing installations can use the same launcher.
+
+1. Choose PDFs or a folder, or drag PDF files into the import area.
+2. On first use, click **Download local model** (free public weights, about 470 MB), then **Build / update index**.
+3. Search in Chinese or English, open **View source**, browse PDF pages and copy a citation or download the original PDF.
+
+Switch **English / 中文** at the top right; the preference is remembered. Controls, status and common errors are bilingual. Paper titles, source passages and raw diagnostic logs retain their original language.
+
+![Local research library showing a synthetic example](docs/web-ui.jpg)
+
+*The screenshot uses a fictional test document, not published research findings.*
+
+Web imports are copied into a separate local library under `data/web/`. **Existing library** lets you search your current CLI/Zotero index without changing it. Both libraries stay out of Git. The UI runs only at `127.0.0.1`; no API key or paid cloud service is used. It retrieves evidence and displays sources; answer generation remains available through your MCP client.
+
+For Linux or an existing terminal workflow, run `bash start_web.sh`, or `.venv/bin/python web_app.py` after installing dependencies. Detailed setup, storage, troubleshooting and optional MCP access to web imports: [Web UI guide / 网页使用指南](WEB_UI.md).
 
 ## Try it without a Zotero library
 
@@ -40,6 +58,7 @@ The demo illustrates retrieval mechanics. Real-paper search, embeddings, PDF ext
 | Research need | Implemented support |
 |---|---|
 | Find methods across languages | SQLite FTS5 keyword search, Chinese-to-English domain expansion, local multilingual E5 embeddings and reciprocal rank fusion |
+| Work without CLI commands | Bilingual local web UI: PDF uploads, index jobs, search, original-page viewer and citation copying |
 | Import your papers | Recursive PDF-folder import, exact-file deduplication and optional metadata sidecars; Zotero collections remain supported |
 | Check an answer against its source | Document IDs, original file paths, PDF page numbers, source passages and PDF-page images; Zotero links when applicable |
 | Compare evaluation protocols | Candidate evidence maps for validation, prediction horizons, alarm postprocessing, metrics and limitations |
@@ -58,6 +77,7 @@ flowchart LR
     B --> C[Page-aware chunks and source metadata]
     C --> D[Local SQLite FTS5 and E5 vectors]
     D --> E[Hybrid retrieval]
+    E --> W[Local web UI and PDF page viewer]
     E --> F[CLI or read-only MCP tools]
     F --> G[Your MCP client and answer model]
     G --> H[Check citations and original PDF pages]
@@ -116,7 +136,7 @@ Replace `Epilepsy Prediction` with your own collection name. The collection and 
 
 The reader takes a read-only SQLite snapshot of the local Zotero database and never writes to Zotero. Stored PDF attachments are supported. Zotero `attachments:` linked-base paths are not currently resolved. Dependencies and the pinned public embedding model need an initial download; parsing, embedding and retrieval then run locally without a paid API.
 
-To deliberately switch an existing clone, edit `config.json`: set `library_source` to `pdf_folder` and `pdf_dir` to an absolute folder path, or set `library_source` to `zotero` with your collection settings, then run `sync`. One clone has one active source/index; switching replaces its active snapshot rather than merging both sources. Use separate clones for two independent libraries, and distinct client-side MCP entry names if registering both in one client.
+To deliberately switch an existing clone, edit `config.json`: set `library_source` to `pdf_folder` and `pdf_dir` to an absolute folder path, or set `library_source` to `zotero` with your collection settings, then run `sync`. The main CLI/MCP workspace has one active source/index; switching replaces that snapshot. Web imports have a separate workspace. Use separate clones for additional libraries, and distinct client-side MCP entry names if registering both in one client.
 
 ## Connect an MCP client (optional)
 
@@ -180,16 +200,16 @@ Run the public checks:
 python3 demo.py --check
 # PyMuPDF is the only external dependency needed for these unit tests.
 python3 -m pip install pymupdf==1.26.7
-python3 -m unittest tests.UnitTests tests.PDFSourceTests -v
+python3 -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
 ```
 
-With full dependencies and the local model installed, `.venv/bin/python -m unittest test_pdf_pipeline -v` creates synthetic PDFs in a disposable clone and checks real parsing, hybrid search, incremental updates and MCP page/image tools. It does not use Zotero or change your active library. `.venv/bin/python check_mcp.py` checks your own indexed PDFs through the stdio protocol.
+With full dependencies and the local model installed, `.venv/bin/python -m unittest test_pdf_pipeline test_web_pipeline -v` creates synthetic PDFs in a disposable clone and checks real parsing, hybrid search, incremental updates, MCP page/image tools, and the web upload/build/search/source workflow. It does not use Zotero or change your active library. `.venv/bin/python check_mcp.py` checks your own indexed PDFs through the stdio protocol.
 
 The original Zotero corpus can additionally use `.venv/bin/python validate.py`. Its corpus tests and `evaluation_cases.json` contain corpus-specific keys; adapt them for other collections. See [BUILD_REPORT.md](BUILD_REPORT.md) for validation scope. Full dependency installation on a fresh machine is separate from the small public CI checks.
 
 ## Data, costs and licensing
 
-PDFs, `*.pdf.json` sidecars, `data/`, `models/`, `.venv/`, personal configuration and credentials are excluded from Git. Original PDFs stay in the folder or Zotero storage you selected and are never modified. Keep private notes and unpublished results out of public issues and pull requests.
+PDFs, `*.pdf.json` sidecars, `data/`, `models/`, `.venv/`, personal configuration and credentials are excluded from Git. CLI originals stay in their PDF folder or Zotero storage; web imports make ignored local copies in `data/web/uploads/`. Original PDFs are never modified. Keep private notes and unpublished results out of public issues and pull requests.
 
 The toolkit makes no paid embedding, OCR or generation API calls. Your chosen chat client/model follows your account's billing arrangement. The local embedding model is separate from the answer model: changing a chat client does not require rebuilding the index. The included CI uses a standard runner on this public repository, with no model download, paid AI API, or artifact/cache storage.
 

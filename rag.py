@@ -5,18 +5,20 @@ import json, os, re, sqlite3, sys, tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / 'data'
+WORKSPACE = Path(os.environ.get('RAG_WORKSPACE',str(ROOT))).expanduser().resolve()
+DATA = WORKSPACE / 'data'
 MODEL = ROOT / 'models' / 'multilingual-e5-small'
-def load_config(root=ROOT):
+def load_config(root=ROOT,settings_root=None):
     config=json.loads((root/'config.example.json').read_text())
-    if (root/'config.json').exists():config.update(json.loads((root/'config.json').read_text()))
+    settings_root=Path(settings_root) if settings_root is not None else root
+    if (settings_root/'config.json').exists():config.update(json.loads((settings_root/'config.json').read_text()))
     config.setdefault('library_source','zotero')  # Existing configurations keep their source.
     if config['library_source'] not in ('zotero','pdf_folder'):raise ValueError('library_source must be zotero or pdf_folder')
     for key in ('zotero_data_dir','pdf_dir'):
         if config.get(key):config[key]=str(Path(config[key]).expanduser().resolve())
     return config
 
-CFG = load_config()
+CFG = load_config(settings_root=WORKSPACE)
 PARSER_VERSION = 'pymupdf4llm-0.0.27-v1'
 os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 os.environ.setdefault('HF_HUB_DISABLE_TELEMETRY', '1')
@@ -265,8 +267,8 @@ CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT);
 '''
 
 def build(skip_vectors=False):
-    DATA.mkdir(exist_ok=True)
-    with open(ROOT/'.build.lock','w') as lock:
+    DATA.mkdir(parents=True,exist_ok=True)
+    with open(WORKSPACE/'.build.lock','w') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         papers=inventory()
         from concurrent.futures import ProcessPoolExecutor,as_completed

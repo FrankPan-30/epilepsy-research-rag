@@ -22,6 +22,6 @@ These are proposed improvements, not implemented features or promises of deliver
 - Exercise the documented Claude Desktop, Cursor and VS Code setup in each desktop UI and record versions and image-tool behavior.
 - Add a Zotero Local API reader alongside the current read-only SQLite route.
 - Make corpus-dependent validation easier to configure for other libraries.
-- Add an optional lightweight review interface after the retrieval workflow is stable.
+- Extend the local web interface with metadata editing and reviewed evidence annotations.
 
 Please open a focused issue with your use case before implementing a large item.

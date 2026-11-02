@@ -24,4 +24,8 @@ jobs:
       - name: Install small test dependency
         run: python -m pip install --no-cache-dir pymupdf==1.26.7
       - name: Portable unit tests
-        run: python -m unittest tests.UnitTests tests.PDFSourceTests -v
+        run: python -m unittest tests.UnitTests tests.PDFSourceTests test_web -v
+      - name: Browser script and launcher syntax
+        run: |
+          node --check web/app.js
+          bash -n start_web.sh "Start Web.command"

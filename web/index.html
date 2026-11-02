@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Research Library · 本地文献库</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><a class="brand" href="/" aria-label="Research Library"><span class="brand-icon">R</span><span>Research Library<small data-i18n="brandSub">癫痫预测 · 文献与证据</small></span></a><div class="header-right"><span class="small muted">v0.4.0</span><span class="local"><i></i><span data-i18n="local">仅在本机运行</span></span><button id="language" class="text-button">English</button></div></header>
+<main>
+<aside>
+  <div class="section-label" data-i18n="workspace">我的工作区</div>
+  <label for="library" data-i18n="chooseLibrary">当前文库</label><select id="library"><option value="web" data-i18n="webLibrary">网页导入库</option><option value="existing" data-i18n="existingLibrary">现有文库</option></select>
+  <p class="muted small" data-i18n="separate">网页导入的 PDF 单独保存，你原来的 Zotero、命令行与 MCP 配置继续保留。</p>
+  <section class="import-box" id="dropzone" aria-label="PDF import">
+    <div class="upload-symbol" aria-hidden="true">↥</div><h2 data-i18n="importTitle">把论文带进来</h2><p data-i18n="dropHint">拖放 PDF 到这里，或选择文件。</p>
+    <button id="chooseFiles" class="primary" data-i18n="chooseFiles">选择 PDF</button><button id="chooseFolder" class="secondary" data-i18n="chooseFolder">选择文件夹</button>
+    <input id="files" type="file" accept=".pdf,application/pdf" multiple hidden><input id="folder" type="file" webkitdirectory multiple hidden>
+    <p class="small muted" data-i18n="uploadLimit">支持批量导入，每份最大 100 MB。相同 PDF 自动跳过。</p>
+  </section>
+  <p id="uploadFeedback" class="feedback" role="status" aria-live="polite"></p>
+  <div id="modelPanel" hidden><p class="small" data-i18n="modelHint">首次使用需下载免费的本地检索模型，约 470 MB。</p><button id="downloadModel" class="secondary" data-i18n="downloadModel">下载本地模型</button></div>
+  <button id="build" class="primary full" data-i18n="build">建立 / 更新索引</button><p id="uploadCount" class="small muted"></p>
+  <section id="jobPanel" class="job" hidden aria-live="polite"><div id="jobMessage"></div><progress id="jobProgress" aria-label="Processing"></progress><details><summary data-i18n="details">运行详情</summary><pre id="jobLog"></pre></details></section>
+  <div class="aside-bottom"><strong data-i18n="threeSteps">三步开始</strong><ol><li data-i18n="step1">导入 PDF</li><li data-i18n="step2">建立本地索引</li><li data-i18n="step3">检索并核对原文</li></ol></div>
+</aside>
+<section class="content">
+  <div class="eyebrow" data-i18n="eyebrow">从文献到证据</div><h1 data-i18n="heading">找到方法，回到原文。</h1><p class="lead" data-i18n="lead">用中文或英文检索论文，查看来源页码，让每条结论有据可查。</p>
+  <div class="stats"><div><strong id="paperCount">—</strong><span data-i18n="papers">篇文献</span></div><div><strong id="pdfCount">—</strong><span>PDF</span></div><div><strong id="pageCount">—</strong><span data-i18n="pages">页原文</span></div><span id="libraryState" class="muted small"></span></div>
+  <form id="searchForm"><label class="sr-only" for="query" data-i18n="searchLabel">文献检索</label><div class="search-row"><input id="query" type="search" maxlength="1000" placeholder="例如：跨患者预测中的误报与报警后处理" autocomplete="off"><button id="searchButton" class="primary" type="submit" data-i18n="search">检索文献</button></div><div class="search-options"><label for="mode" data-i18n="mode">检索方式</label><select id="mode"><option value="hybrid" data-i18n="hybrid">语义 + 关键词</option><option value="keyword" data-i18n="keyword">仅关键词</option></select><button id="catalog" type="button" class="text-button" data-i18n="catalog">浏览全部文献</button></div></form>
+  <div class="suggestions"><button type="button" data-query="alarm">误报与报警后处理</button><button type="button" data-query="validation">跨患者验证与数据泄漏</button><button type="button" data-query="model">模型设计与消融</button></div>
+  <div id="notice" class="notice" role="alert" hidden></div>
+  <div class="result-heading"><h2 id="resultTitle" data-i18n="resultsTitle">文献与原文片段</h2><span id="resultCount" class="muted small" role="status" aria-live="polite"></span></div>
+  <div id="results"><div class="empty"><span class="empty-mark" aria-hidden="true">⌕</span><h3 data-i18n="emptyTitle">从一个研究问题开始</h3><p data-i18n="emptyText">导入论文并建立索引，或切换到现有文库。检索结果会附上可查看的原文页码。</p></div></div>
+  <footer data-i18n="footer">这里展示检索证据。引用与 OCR 内容需要回到原文核对，检索排名不代表证据可信度。</footer>
+</section>
+</main>
+<dialog id="viewer" aria-labelledby="viewerTitle"><div class="viewer-header"><div><div class="eyebrow" data-i18n="original">原文核查</div><h2 id="viewerTitle"></h2></div><button id="closeViewer" class="icon-button" aria-label="Close">×</button></div><div class="viewer-toolbar"><button id="prevPage" class="secondary" data-i18n="previous">上一页</button><span id="pageLabel"></span><button id="nextPage" class="secondary" data-i18n="next">下一页</button><span class="spacer"></span><button id="copyCitation" class="secondary" data-i18n="copy">复制引用</button><button id="downloadPdf" class="secondary" data-i18n="download">下载原 PDF</button></div><p id="viewerMessage" role="status"></p><div class="page-image"><img id="pageImage" alt="Original PDF page"></div><details class="page-text"><summary data-i18n="extracted">查看提取文本（需核对原图）</summary><pre id="pageText"></pre></details></dialog>
+<script src="/app.js"></script>
+</body></html>
