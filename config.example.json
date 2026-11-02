@@ -1,0 +1,15 @@
+{
+  "zotero_data_dir": "~/Zotero",
+  "collection_key": "",
+  "collection_name": "癫痫预测",
+  "embedding_model": "intfloat/multilingual-e5-small",
+  "chunk_tokens": 420,
+  "overlap_tokens": 45,
+  "candidates_per_route": 40,
+  "default_results": 8,
+  "max_per_paper": 3,
+  "cloud_api_enabled": false,
+  "generation": "Codex reads retrieved evidence; no separate generation API",
+  "update": "manual_incremental",
+  "priorities": ["文献检索与方法总结", "项目知识与实验管理", "数据质量与评价规范", "模型诊断与优化", "实验设计与结果分析"]
+}

@@ -1,0 +1,6 @@
+pymupdf==1.26.7
+pymupdf4llm==0.0.27
+sentence-transformers==5.7.0
+mcp==1.30.0
+numpy>=2,<3
+rapidocr_onnxruntime==1.4.4

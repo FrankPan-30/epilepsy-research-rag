@@ -1,0 +1,10 @@
+[
+  {"id":"gdl","query":"哪篇研究用电极之间的物理距离构造邻接矩阵，并学习患者特异的图？","paper":"5Z9ZBDW7","attachment":"E742SV7N","page":3,"anchor":"distance-based adjacency matrix"},
+  {"id":"domain","query":"跨受试者癫痫预测如何结合域适应和深度可分离卷积？","paper":"P75DTD7H","attachment":"RUVV7T8P","page":3,"anchor":"depthwise filters"},
+  {"id":"single","query":"针对低分辨率单通道脑电，哪项研究修改了MobileNet中的stride以保留特征？","paper":"BC99CY3E","attachment":"N6YC83KF","page":3,"anchor":"MobileNet"},
+  {"id":"contrastive","query":"哪种分层对比学习把instance-level和time-level损失结合，再微调SE-EEGNet？","paper":"L6JNNXRS","attachment":"LC7RUHV3","page":3,"anchor":"time-level CL"},
+  {"id":"spectral","query":"PAPC如何通过EEG功率谱参数化进行自适应通道选择？","paper":"2DPRX85E","attachment":"HIR6WM9C","page":3,"anchor":"power spectra parameterization"},
+  {"id":"chronology","query":"EEG epilepsy seizure prediction: the post-processing stage as a chronology","paper":"QRUMQNXJ","attachment":"ETY6H3HA","page":2,"anchor":"post-processing"},
+  {"id":"generalize","query":"跨患者发作风险预测如何保持校准以适应不同的发作率？","paper":"T5JNWYV2","attachment":"CYF9BYII","page":2,"anchor":"calibration of pre-trained"},
+  {"id":"critical","query":"临界减速为什么用信号方差和自相关的增加表示？","paper":"N9MB96LL","attachment":"XQI3LI6A","page":2,"anchor":"variance and autocorrelation"}
+]
