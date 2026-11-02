@@ -1,10 +1,11 @@
 """Meaningful checks for corpus provenance, retrieval and persistence boundaries."""
-import json, tempfile, unittest
+import json, shutil, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 import rag, experiments
 import configure
 import demo
+import pdf_source
 
 class UnitTests(unittest.TestCase):
     def test_synthetic_demo_isolated_from_personal_corpus(self):
@@ -25,6 +26,7 @@ class UnitTests(unittest.TestCase):
             (root/'config.json').write_text(json.dumps({'collection_key':'LOCAL123'}))
             cfg=rag.load_config(root)
             self.assertEqual(cfg['collection_key'],'LOCAL123')
+            self.assertEqual(cfg['library_source'],'zotero')
             self.assertTrue(Path(cfg['zotero_data_dir']).is_absolute())
     def test_configure_preserves_existing_settings(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -39,6 +41,25 @@ class UnitTests(unittest.TestCase):
         path=Path('/tmp/my research project')
         args=shlex.split(configure.mcp_command(path))
         self.assertEqual(args[-2:], [str(path/'.venv/bin/python'),str(path/'mcp_server.py')])
+    def test_mcp_client_configs_preserve_launch_and_environment(self):
+        root=Path('/tmp/my research project')
+        for client in ('generic','claude-desktop','cursor','vscode'):
+            obj=json.loads(json.dumps(configure.mcp_config(root,client)))
+            server=obj['servers' if client=='vscode' else 'mcpServers']['epilepsy_research']
+            self.assertEqual(server['command'],str(root/'.venv/bin/python'))
+            self.assertEqual(server['args'],[str(root/'mcp_server.py')])
+            self.assertEqual(server['env']['HF_HUB_OFFLINE'],'1')
+            if client in ('vscode','cursor'):self.assertEqual(server['type'],'stdio')
+    def test_configure_pdf_folder_and_existing_config_protection(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'config.example.json').write_text('{}')
+            configure.initialize(root,pdf_dir=root/'My papers')
+            cfg=rag.load_config(root)
+            self.assertEqual(cfg['library_source'],'pdf_folder')
+            self.assertEqual(cfg['pdf_dir'],str((root/'My papers').resolve()))
+            before=(root/'config.json').read_bytes()
+            with self.assertRaises(FileExistsError):configure.initialize(root)
+            self.assertEqual((root/'config.json').read_bytes(),before)
     def test_pdf_geometry_preserves_coordinates(self):
         import pymupdf
         self.assertEqual(json.loads(rag.dumps({'bbox':pymupdf.Rect(1,2,3,4)}))['bbox'],[1,2,3,4])
@@ -49,6 +70,82 @@ class UnitTests(unittest.TestCase):
             with self.assertRaises(ValueError):experiments.save({**rec,'id':'../escape'})
             with self.assertRaises(ValueError):experiments.save({**rec,'status':'completed'})
             self.assertEqual(json.loads((Path(folder)/'experiments/unit-test/current.json').read_text())['status'],'planned')
+
+class PDFSourceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name)
+    def pdf(self,name,title='',author=''):
+        import pymupdf
+        path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True)
+        with pymupdf.open() as doc:
+            doc.new_page().insert_text((72,72),'Synthetic research fixture. No clinical evidence.')
+            doc.set_metadata({'title':title,'author':author,'creationDate':'D:20261102000000'})
+            doc.save(path)
+        return path
+    def test_recursive_case_insensitive_import_without_zotero(self):
+        self.pdf('nested/one.PDF','Embedded title','Raw PDF author')
+        with patch.object(rag,'CFG',{'library_source':'pdf_folder','pdf_dir':str(self.root)}),patch.object(rag,'zotero_inventory',side_effect=AssertionError('Zotero must not be read')):
+            paper=rag.inventory()[0]
+        self.assertEqual(paper['title'],'Embedded title')
+        self.assertEqual(paper['authors'],['Raw PDF author'])
+        self.assertEqual(paper['date'],'')  # Creation time is not publication time.
+        self.assertEqual(paper['doi'],'')
+        self.assertIn('nested',paper['collections'])
+    def test_filename_fallback_and_sidecar_provenance(self):
+        path=self.pdf('untitled.pdf')
+        self.assertEqual(pdf_source.pdf_inventory(self.root)[0]['title'],'untitled')
+        path.with_name(path.name+'.json').write_text(json.dumps({'title':'Reviewed title','authors':['A. Author'],'date':'2024','doi':'10.example/fixture','tags':['synthetic']}))
+        record=pdf_source.pdf_inventory(self.root)[0]
+        self.assertEqual(record['title'],'Reviewed title')
+        self.assertEqual(record['date'],'2024')
+        self.assertEqual(record['metadata_provenance']['title'],'sidecar')
+    def test_duplicate_bytes_and_rename_keep_identity(self):
+        first=self.pdf('one.pdf');second=self.root/'sub/two.pdf';second.parent.mkdir();shutil.copy2(first,second)
+        rows=pdf_source.pdf_inventory(self.root);self.assertEqual(len(rows),1)
+        self.assertEqual(len(rows[0]['duplicate_paths']),1)
+        key=rows[0]['key'];first.rename(self.root/'renamed.pdf');second.unlink()
+        self.assertEqual(pdf_source.pdf_inventory(self.root)[0]['key'],key)
+        self.assertEqual(rag.sha(self.root/'renamed.pdf'),key.removeprefix('PDF-'))
+    def test_changed_content_gets_new_identity(self):
+        first=self.pdf('one.pdf');old=pdf_source.pdf_inventory(self.root)[0]['key']
+        first.unlink();self.pdf('one.pdf','Updated title')
+        self.assertNotEqual(pdf_source.pdf_inventory(self.root)[0]['key'],old)
+    def test_duplicate_sidecars_merge_and_conflicts_fail(self):
+        first=self.pdf('one.pdf');second=self.root/'two.pdf';shutil.copy2(first,second)
+        second.with_name(second.name+'.json').write_text('{"date":"2024"}')
+        self.assertEqual(pdf_source.pdf_inventory(self.root)[0]['date'],'2024')
+        first.with_name(first.name+'.json').write_text('{"date":"2025"}')
+        with self.assertRaisesRegex(ValueError,'Conflicting date'):pdf_source.pdf_inventory(self.root)
+    def test_invalid_metadata_does_not_silently_drop_fields(self):
+        path=self.pdf('one.pdf');sidecar=path.with_name(path.name+'.json')
+        for body in ('bad json','[]','{"authors":"Author"}','{"title":5}','{"pdf_path":"/tmp/elsewhere"}'):
+            sidecar.write_text(body)
+            with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root)
+    def test_missing_empty_hidden_and_symlink_sources(self):
+        with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root/'missing')
+        with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root)
+        self.pdf('.hidden/paper.pdf')
+        with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root)
+        outside=self.pdf('outside.pdf');folder=self.root/'selected';folder.mkdir()
+        (folder/'linked.pdf').symlink_to(outside)
+        with self.assertRaises(ValueError):pdf_source.pdf_inventory(folder)
+    def test_corrupt_pdf_remains_visible_for_failure_reporting(self):
+        (self.root/'broken.pdf').write_text('Not a PDF')
+        paper=pdf_source.pdf_inventory(self.root)[0]
+        self.assertIn('metadata_error',paper)
+        self.assertTrue(paper['attachments'][0]['exists'])
+    def test_citations_use_source_specific_links(self):
+        self.pdf('空 格.pdf');paper=pdf_source.pdf_inventory(self.root)[0]
+        cite=rag.citation_for(paper,paper['attachments'][0],2,'fulltext')
+        self.assertNotIn('zotero_url',cite)
+        self.assertTrue(cite['file_url'].endswith('#page=2'))
+        self.assertNotIn(' ',cite['file_url'])
+        zotero={**paper,'key':'ZOTERO01','library_source':'zotero'}
+        cite=rag.citation_for(zotero,{'key':'ATTACH01','path':paper['attachments'][0]['path']},2,'fulltext')
+        self.assertEqual(cite['zotero_url'],'zotero://open-pdf/library/items/ATTACH01?page=2')
+        guidance={**paper,'library_source':'project'}
+        self.assertNotIn('zotero_url',rag.citation_for(guidance,{},None,'project_guidance'))
 
 @unittest.skipUnless((rag.DATA/'current.json').exists(),'No local corpus; build with rag.py sync for corpus checks')
 class CorpusTests(unittest.TestCase):

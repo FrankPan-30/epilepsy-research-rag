@@ -10,7 +10,7 @@ Run the dependency-free demo with Python 3.12:
 python3 demo.py --check
 ```
 
-Install the project dependencies in a virtual environment for development. Run the portable tests with `.venv/bin/python -m unittest tests.UnitTests -v`. Full-corpus checks require a local Zotero library and the model; see README.
+Install the project dependencies in a virtual environment for development. Run portable tests with `.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests -v`. With full dependencies and the local model, `.venv/bin/python -m unittest test_pdf_pipeline -v` exercises real PDF import, retrieval and MCP in a disposable clone without Zotero. Original-corpus checks need the matching Zotero library; see README.
 
 Useful contributions are listed in [ROADMAP.md](ROADMAP.md). Before a large change, describe the problem and proposed behavior in an issue. Small fixes can go straight to a pull request.
 

@@ -1,22 +1,31 @@
-# v0.2.0 — First public release
+# v0.3.0 — PDF folders and more MCP clients
 
-Epilepsy Research RAG helps researchers search a local Zotero collection and compare seizure-prediction methods with source passages and original PDF pages.
+Build a research library directly from a folder of PDFs. Zotero is now an optional import source; existing Zotero configurations, item keys and Codex registrations keep working.
 
-## Start here
+## New
 
-Run `python3 demo.py` after cloning to try a synthetic keyword-search example with no dependencies, model download or API key. Follow the README to connect your own Zotero collection and Codex.
+- Recursive PDF import, SHA256-based identity and exact-file deduplication.
+- Optional `paper.pdf.json` bibliographic metadata with field provenance and conflict checking.
+- Source-appropriate file/page citations, retaining Zotero links for Zotero records.
+- Configuration generation and instructions for Claude Desktop, Cursor and VS Code's compatibility format, alongside the existing Codex command.
+- English and Chinese quick starts that begin with ordinary PDFs.
 
-## Included
+## Try it
 
-- Local PDF parsing and selective OCR; SQLite FTS5 + multilingual E5 hybrid retrieval.
-- Page-level provenance, source-type separation, candidate method/evaluation evidence maps and nine read-only MCP tools.
-- Incremental indexing, research workflow guides and versioned local experiment records.
-- English and Chinese guides, AGPL-3.0 licensing, contributor templates and portable GitHub Actions checks.
+After installing dependencies, initialize a fresh clone with:
 
-## Scope
+```bash
+.venv/bin/python configure.py --pdf-dir '/absolute/path/to/My Papers'
+.venv/bin/python download_model.py
+.venv/bin/python rag.py sync
+```
 
-The complete pipeline has been exercised on macOS Apple Silicon / Python 3.12. Portable checks cover the synthetic demo and unit tests; they do not validate every PDF parser or every operating system. Native Windows is not supported yet.
+Choose your MCP client, or use CLI search directly. Existing installations do not need to rerun initialization. `configure.py` protects their current settings.
 
-Private papers, indices, model weights and experiment records are excluded. Field maps need source checking. The eight-query development check is a retrieval smoke test, not an answer-quality benchmark.
+## Validation and scope
 
-Feedback on real research workflows, English guide translations, redistributable test fixtures and Linux setup is welcome through Issues, Discussions and pull requests.
+Portable tests cover PDF import, metadata, duplicate handling, source-specific links and generated client configurations. A separate integration test generates PDFs in a disposable clone and runs real parsing, local embeddings, search, incremental updates and MCP page/image retrieval without Zotero.
+
+The server's stdio protocol is tested through the MCP SDK. Other desktop-client interfaces are documented from official configuration references and have not each been manually exercised. This release supplies local stdio, not an HTTP service or standalone chat UI.
+
+One clone maintains one active source/index. Identical PDF bytes share an ID; changing the bytes creates a new ID. Empty or invalid folder configurations keep the previous index active. Original PDFs, sidecars, indices, model weights and personal client settings stay outside Git.

@@ -1,4 +1,4 @@
-"""Local, source-grounded Zotero retrieval. No paid APIs and no Zotero writes."""
+"""Local, source-grounded PDF/Zotero retrieval. No paid APIs or source-file writes."""
 from __future__ import annotations
 import argparse, collections, contextlib, datetime, fcntl, hashlib, html, importlib.metadata
 import json, os, re, sqlite3, sys, tempfile
@@ -10,7 +10,10 @@ MODEL = ROOT / 'models' / 'multilingual-e5-small'
 def load_config(root=ROOT):
     config=json.loads((root/'config.example.json').read_text())
     if (root/'config.json').exists():config.update(json.loads((root/'config.json').read_text()))
-    config['zotero_data_dir']=str(Path(config['zotero_data_dir']).expanduser().resolve())
+    config.setdefault('library_source','zotero')  # Existing configurations keep their source.
+    if config['library_source'] not in ('zotero','pdf_folder'):raise ValueError('library_source must be zotero or pdf_folder')
+    for key in ('zotero_data_dir','pdf_dir'):
+        if config.get(key):config[key]=str(Path(config[key]).expanduser().resolve())
     return config
 
 CFG = load_config()
@@ -117,11 +120,32 @@ def zotero_inventory():
         if active[i]['typeName'] in ('attachment','note','annotation'): continue
         f = fields[i]; papers.append({'key':active[i]['key'],'title':f.get('title',''), 'authors':authors[i], 'date':f.get('date',''), 'doi':f.get('DOI',''), 'journal':f.get('publicationTitle',''), 'abstract':f.get('abstractNote',''), 'item_type':active[i]['typeName'], 'collections':members[i], 'tags':tags[i], 'attachments':attachments[i], 'notes':notes[i], 'version':active[i]['version']})
     db.rollback(); db.close()
+    for paper in papers:paper.update(library_source='zotero',metadata_quality='zotero_metadata_unreviewed')
     return papers
+
+def inventory():
+    if CFG.get('library_source','zotero')=='zotero':return zotero_inventory()
+    if CFG['library_source']=='pdf_folder':
+        from pdf_source import pdf_inventory
+        return pdf_inventory(CFG.get('pdf_dir',''))
+    raise ValueError('library_source must be zotero or pdf_folder')
+
+def citation_for(paper,attachment,page,kind):
+    source=paper.get('library_source','zotero')
+    cite={'paper_key':paper['key'],'title':paper['title'],'authors':paper['authors'],'date':paper['date'],
+          'doi':paper['doi'],'pdf_page':page,'attachment_key':attachment.get('key'),'source_kind':kind,'library_source':source}
+    if attachment.get('path'):
+        cite['pdf_path']=attachment['path']
+        cite['file_url']=Path(attachment['path']).resolve().as_uri()+f'#page={page or 1}'
+    if source=='zotero':
+        cite['zotero_url']=(f"zotero://open-pdf/library/items/{attachment['key']}?page={page or 1}" if attachment.get('path')
+                            else f"zotero://select/library/items/{paper['key']}")
+    return cite
 
 def parse_pdf(a):
     import pymupdf, pymupdf4llm
     digest = sha(a['path']); dest = DATA / 'parsed' / (a['key']+'.json')
+    if a.get('sha256') and a['sha256']!=digest:raise ValueError('PDF changed during inventory; run sync again')
     if dest.exists():
         cached = json.loads(dest.read_text())
         if cached['sha256']==digest and cached['parser']==PARSER_VERSION:
@@ -244,7 +268,7 @@ def build(skip_vectors=False):
     DATA.mkdir(exist_ok=True)
     with open(ROOT/'.build.lock','w') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        papers=zotero_inventory(); write_json(DATA/'inventory.json',papers)
+        papers=inventory()
         from concurrent.futures import ProcessPoolExecutor,as_completed
         attachments={a['key']:a for p in papers for a in p['attachments'] if a['exists']}
         with ProcessPoolExecutor(max_workers=3) as workers:
@@ -253,17 +277,17 @@ def build(skip_vectors=False):
                 key,pages,error=job.result()
                 print(f'PDF {n}/{len(jobs)} {key}: {error or str(pages)+" pages"}',file=sys.stderr,flush=True)
         # Stage everything in a generation directory; publish a single atomic pointer.
-        generation=DATA/('generation-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+        generation=DATA/('generation-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
         generation.mkdir()
         db=sqlite3.connect(generation/'library.sqlite'); db.executescript(SCHEMA)
         tokenizer=model().tokenizer
         manifest={'started_at':stamp(),'papers':len(papers),'pdfs':0,'pages':0,'failed_pdfs':[], 'low_text_pages':[], 'ocr_pages':0,'ocr_failed_pages':[],'parser':PARSER_VERSION,'embedding_model':CFG['embedding_model'],'config':CFG}
+        manifest['library_source']=CFG.get('library_source','zotero')
+        manifest['duplicate_pdfs_skipped']=sum(len(p.get('duplicate_paths',[])) for p in papers)
         manifest['metadata_only_papers']=sum(not any(a['exists'] for a in p['attachments']) for p in papers)
         texts=[]; cards=[]
         def add(p,a,page,section,kind,text,quality):
-            cite={'paper_key':p['key'],'title':p['title'],'authors':p['authors'],'date':p['date'],'doi':p['doi'],'pdf_page':page,'attachment_key':a.get('key'), 'source_kind':kind}
-            if a.get('path'): cite['pdf_path']=a['path'];cite['zotero_url']=f"zotero://open-pdf/library/items/{a['key']}?page={page or 1}"
-            else: cite['zotero_url']=f"zotero://select/library/items/{p['key']}"
+            cite=citation_for(p,a,page,kind)
             idx=len(texts)+1
             db.execute('INSERT INTO chunks VALUES(?,?,?,?,?,?,?,?,?)',(idx,p['key'],a.get('key'),page,section,kind,text,dumps(cite),quality))
             db.execute('INSERT INTO search(rowid,title,text) VALUES(?,?,?)',(idx,keyword_text(p['title']),keyword_text(text)))
@@ -274,7 +298,7 @@ def build(skip_vectors=False):
         for n,p in enumerate(papers,1):
             db.execute('INSERT INTO papers VALUES(?,?,?)',(p['key'],p['title'],dumps(p)))
             for section,text in chunks_for(p['title']+'\n'+p['abstract'],tokenizer):
-                add(p,{},None,'Bibliographic record','metadata',text,'zotero_metadata_unreviewed')
+                add(p,{},None,'Bibliographic record','metadata',text,p.get('metadata_quality','zotero_metadata_unreviewed'))
             card={'paper_key':p['key'],'title':p['title'],'status':'candidate_evidence_not_verified_facts','fields':{k:[] for k in FIELDS},'missing_fulltext':True}
             for a in p['attachments']:
                 if not a['exists']:continue
@@ -307,7 +331,7 @@ def build(skip_vectors=False):
             print(f"[{n}/{len(papers)}] {p['key']} {p['title'][:65]}",file=sys.stderr,flush=True)
         # Curated project guidance is explicitly separated from paper evidence.
         for path in sorted((ROOT/'knowledge').glob('*.md')):
-            p={'key':'LOCAL:'+path.stem,'title':path.stem,'authors':[],'date':'','doi':''}
+            p={'key':'LOCAL:'+path.stem,'title':path.stem,'authors':[],'date':'','doi':'','library_source':'project'}
             db.execute('INSERT INTO papers VALUES(?,?,?)',(p['key'],p['title'],dumps(p)))
             for section,text in chunks_for(path.read_text(),tokenizer):add(p,{},None,section,'project_guidance',text,'project_rule_not_literature_evidence')
         manifest['chunks']=len(texts)
@@ -334,6 +358,8 @@ def build(skip_vectors=False):
         for k,v in manifest.items():db.execute('INSERT INTO meta VALUES(?,?)',(k,json.dumps(v,ensure_ascii=False)))
         db.commit();db.close()
         write_json(generation/'cards.json',cards);write_json(generation/'manifest.json',manifest)
+        write_json(generation/'inventory.json',papers)
+        write_json(DATA/'inventory.json',papers)  # Legacy inventory location, written only after a successful build.
         write_json(DATA/'current.json',{'generation':generation.name})
         print(dumps(manifest))
 
@@ -440,7 +466,10 @@ class Library:
         if not r:raise ValueError('Attachment is outside the indexed corpus')
         cite=json.loads(r[0]);parsed=json.loads((self.data/'parsed'/(attachment_key+'.json')).read_text())
         if page<1 or page>len(parsed['pages']):raise ValueError('Page out of range')
-        return {'citation':{**cite,'pdf_page':page,'zotero_url':f'zotero://open-pdf/library/items/{attachment_key}?page={page}'},'page':parsed['pages'][page-1]}
+        cite['pdf_page']=page
+        if cite.get('pdf_path'):cite['file_url']=Path(cite['pdf_path']).resolve().as_uri()+f'#page={page}'
+        if 'zotero_url' in cite:cite['zotero_url']=f'zotero://open-pdf/library/items/{attachment_key}?page={page}'
+        return {'citation':cite,'page':parsed['pages'][page-1]}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='cmd',required=True)
@@ -452,7 +481,7 @@ def main():
     r=sub.add_parser('catalog');r.add_argument('--query',default='');r.add_argument('--field',choices=list(FIELDS))
     a=p.parse_args()
     if a.cmd=='sync':build();return
-    if a.cmd=='inventory':print(dumps(zotero_inventory()));return
+    if a.cmd=='inventory':print(dumps(inventory()));return
     lib=Library()
     if a.cmd=='status':out=lib.status()
     elif a.cmd=='search':out=lib.search(a.query,a.limit,a.paper,a.source,'keyword' if a.keyword_only else 'hybrid',a.collection,a.year_min,a.year_max)

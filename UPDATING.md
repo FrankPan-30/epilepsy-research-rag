@@ -8,8 +8,10 @@
 git status
 git pull --ff-only
 # 修改代码、工作流或配置模板
-.venv/bin/python -m unittest tests.UnitTests -v
-# 已有本地文库时执行完整检查
+.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests -v
+# 完整依赖和模型已安装时，检查独立 PDF 流程
+.venv/bin/python -m unittest test_pdf_pipeline -v
+# 原始 Zotero 开发文库的完整检查（含固定验收 key）
 .venv/bin/python validate.py
 git diff
 git add <本次修改的文件>
@@ -23,7 +25,7 @@ git push origin main
 
 ## 更新论文知识库
 
-Zotero 新增论文、附件或元数据后运行：
+PDF 文件夹或 Zotero 中新增/移除论文、更新附件或元数据后运行：
 
 ```bash
 .venv/bin/python rag.py sync
@@ -32,10 +34,14 @@ Zotero 新增论文、附件或元数据后运行：
 
 这会更新本机 `data/`，复用未变化的解析和向量。论文全文、索引、实验记录不会随 Git 推送。修改 `knowledge/` 后也需要 `sync`，使检索索引采用新内容。
 
+旧配置未指定 `library_source` 时继续按 Zotero 读取。文件夹模式设为 `pdf_folder`，并填写 `pdf_dir`；PDF 内容相同的副本合并，改名保留 ID，修改 PDF 字节产生新 ID。可选的 `*.pdf.json` 元数据文件随原件另行保存。空 PDF 目录会拒绝同步以保护已有索引。
+
+每个克隆目录维护一个活动来源；切换来源后重新 `sync` 会替换活动快照，不自动合并来源。若同时保留两个文库，使用两个独立克隆。客户端调用同一个 MCP 服务，配置说明见 [MCP_CLIENTS.md](MCP_CLIENTS.md)。
+
 ## 换电脑或恢复
 
 1. 克隆仓库，按 README 安装环境并生成本地配置。
-2. 恢复或同步自己的 Zotero 文库及 PDF 附件，确认配置的集合名称/key。
+2. 恢复 PDF 文件夹与元数据 JSON，或同步 Zotero 文库及附件；确认 `pdf_dir` 或集合名称/key。
 3. 下载固定版本模型并运行 `sync` 重建。
 4. 需要保留人工核对记录或实验历史时，另外迁移 `data/reviews/` 和 `data/experiments/`。这些是个人资料，不在 GitHub 源码仓库中。
 5. Zotero item key 变化后，调整本地检索验收案例。更换 PDF 后重新检查对应证据。

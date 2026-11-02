@@ -2,65 +2,109 @@
 
 [English](README.md) | **简体中文**
 
-开源版本采用 [AGPL-3.0](LICENSE)。贡献入口见 [CONTRIBUTING.md](CONTRIBUTING.md)，计划见 [ROADMAP.md](ROADMAP.md)。
+**直接导入 PDF 文件夹，或选择连接 Zotero；在命令行检索，也可通过 MCP 连接 Codex 等客户端。** 优先服务癫痫预测文献检索和方法总结，并支持项目知识、评价规范、模型诊断和实验设计。
 
-本地文献与索引 + Codex 云端分析。优先服务文献检索和方法总结，并支持项目知识、评价规范、模型诊断和实验设计。程序没有调用付费生成或向量 API；模型文件首次公开下载，运行时离线加载。
+解析、向量与检索保存在本地，回答由所选客户端的大模型生成；传给云端模型的证据由对应服务处理。程序没有调用付费生成或向量 API。开源版本采用 [AGPL-3.0](LICENSE)。
 
 ## 先试用：无需论文、依赖安装或 API key
 
-在克隆目录运行 `python3 demo.py`，或使用 `python3 demo.py 'LOPOCV validation'`。演示通过实际关键词检索代码搜索三条明确标记的合成笔记，运行后自动清理临时索引。它展示检索流程；完整混合检索与真实论文需要下面的安装步骤。可运行 `python3 demo.py --check` 检查演示。
+在克隆目录运行 `python3 demo.py`，或使用 `python3 demo.py 'LOPOCV validation'`。演示通过实际关键词检索代码搜索三条明确标记的合成笔记，运行后自动清理临时索引。可运行 `python3 demo.py --check` 检查演示。真实论文与完整混合检索需要下面的安装步骤。
 
 ## 首次安装或换电脑
 
-当前已验证环境为 macOS Apple Silicon、Python 3.12。运行时使用本地模型，首次安装需要联网下载依赖与公开模型。Windows 原生环境尚未适配（文件锁使用 `fcntl`）。
+完整流程已在 macOS Apple Silicon、Python 3.12 上验证；便携 CI 在 Ubuntu 运行。Windows 原生环境尚未适配（文件锁使用 `fcntl`）。首次安装需要联网下载依赖与公开模型，运行时离线加载。
 
 ```bash
 git clone https://github.com/FrankPan-30/epilepsy-research-rag.git
 cd epilepsy-research-rag
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.lock.txt
+```
+
+### 方式 A：直接导入 PDF 文件夹，无需 Zotero
+
+```bash
+.venv/bin/python configure.py --pdf-dir '/absolute/path/to/My Papers'
+.venv/bin/python download_model.py
+.venv/bin/python rag.py inventory
+.venv/bin/python rag.py sync
+.venv/bin/python rag.py status
+```
+
+递归包含子文件夹中的 `.pdf` / `.PDF`，跳过隐藏路径和符号链接。完全相同的文件按 SHA256 合并成一条记录，保留重复路径；同一论文的不同 PDF 版本仍为不同记录。文件内容不变时，改名或移动保留 ID；内容变化后产生新 ID。
+
+标题优先使用 PDF 内嵌信息，否则使用文件名；作者保留内嵌原始字符串并标记未核验。年份、DOI、期刊和摘要缺失时留空，PDF 创建日期不作为发表日期。可在 `paper.pdf` 旁放一个可选的 `paper.pdf.json`：
+
+```json
+{
+  "title": "论文标题",
+  "authors": ["First Author", "Second Author"],
+  "date": "2024",
+  "doi": "",
+  "journal": "",
+  "abstract": "",
+  "tags": ["报警后处理"]
+}
+```
+
+全部字段均可省略；文本字段填字符串，`authors` 和 `tags` 填字符串列表。字段来源会记录为内嵌信息、文件名或 JSON 补充。重复 PDF 的补充信息兼容时合并，同一字段冲突时停止同步并提示修正。元数据格式错误、目录缺失或目录无 PDF 时保留原有索引。损坏或加密 PDF 会保留条目，并在 `status` 报告提取失败。文件夹名称可用于 `--collection` 筛选。
+
+### 方式 B：Zotero 可选入口，原有方式保留
+
+```bash
 .venv/bin/python configure.py --zotero-dir "$HOME/Zotero" --collection-name '癫痫预测'
 .venv/bin/python download_model.py
 .venv/bin/python rag.py sync
 ```
 
-`configure.py` 创建本机的 `config.json`，后续 Git 更新不会覆盖它。同名集合不唯一时，设置 `collection_key`。已有配置时直接编辑该文件，初始化命令会保护它。
+首次安装时从 A / B 中选一种。`configure.py` 创建本机的 `config.json`，已有配置时拒绝覆盖。旧配置没有 `library_source` 字段时继续按 Zotero 读取，现有条目 key、MCP 名称和 Codex 连接保持兼容。同名集合不唯一时，设置 `collection_key`。模板保留原 Zotero 默认值以兼容已有安装。
 
-接入 Codex：运行下面的命令，复制它输出的 `codex mcp add ...` 命令执行。它会按当前克隆位置生成正确路径。若已有同名连接，先检查现有配置再决定是否更换。
+如主动切换来源，编辑 `config.json`：PDF 模式设置 `"library_source": "pdf_folder"` 和 `pdf_dir` 的绝对路径；Zotero 模式设置 `"library_source": "zotero"` 及集合信息，然后运行 `sync`。一个克隆目录维护一个活动来源，切换会替换当前索引快照；同时维护两个独立文库可使用两个克隆目录，在同一客户端注册时给两个 MCP 条目使用不同名称。
+
+## 连接 MCP 客户端（可选）
+
+服务使用标准的本地 stdio MCP，生成命令或配置：
 
 ```bash
+# 原有 Codex 命令保持不变
 .venv/bin/python configure.py --print-mcp
+# 其他本地客户端
+.venv/bin/python configure.py --print-mcp --mcp-client claude-desktop
+.venv/bin/python configure.py --print-mcp --mcp-client cursor
+.venv/bin/python configure.py --print-mcp --mcp-client vscode
 ```
 
-当前电脑原有项目连接可以继续使用。项目不自动修改全局 Codex 配置。
+Codex 运行打印出的命令；其他客户端将 JSON 合并进对应配置文件。程序仅打印内容，不自动覆盖客户端设置。详见 [MCP 客户端说明](MCP_CLIENTS.md)，包括配置位置、VS Code 兼容格式和验证步骤。
+
+底层 stdio 调用与工具返回通过 SDK 客户端测试。Claude Desktop、Cursor、VS Code 的说明根据官方格式编写，尚未逐个在桌面界面实测。仅接受远程 HTTP 的网页客户端还需要额外部署或桥接，本版本提供本地 stdio 服务。
 
 ## 使用
 
-在 Codex 中说：
+在接入的 MCP 客户端中说：
 
 > 检索我的癫痫预测知识库，总结跨患者研究的报警后处理方法，核对评价协议并引用原文页码。
 
-项目 MCP 名称为 `epilepsy_research`。如当前会话尚未加载 MCP，直接使用以下命令，结果同源。
+项目 MCP 名称为 `epilepsy_research`。也可直接使用命令行，不需要聊天客户端或生成 API key：
 
 ```bash
 .venv/bin/python rag.py status
 .venv/bin/python rag.py search '跨患者预测中的误报和报警后处理' --limit 8
-.venv/bin/python rag.py paper ZOTERO_ITEM_KEY
+.venv/bin/python rag.py paper PAPER_KEY
 .venv/bin/python rag.py read CHUNK_ID --neighbors 1
 .venv/bin/python rag.py catalog --field alarm_postprocessing
 .venv/bin/python rag.py sync
 ```
 
-`paper` 中填写真实 Zotero 条目 key，`read` 中填写本次检索返回的数字 ID。引用需保留返回的 generation；更新后重新检索，避免旧 chunk ID 对应不同内容。
+`paper` 中填写检索返回的 key：PDF 文件夹模式以 `PDF-` 开头，Zotero 模式保留原 key；`read` 填写本次检索返回的数字 ID。引用需保留返回的 generation；更新后重新检索，避免旧 chunk ID 对应不同内容。
 
 ## 内容与证据
 
-- 范围：配置中的 Zotero 集合和全部子集合。按 item key 去重，排除回收站、独立附件和独立笔记；DOI/标题的跨条目重复仍需人工审核。
-- 使用 SQLite 只读事务读取一致快照。此路线是已确认本机 API 无响应时的回退，不直接写 Zotero。
-- PDF 原件继续由 Zotero 保存。解析缓存保存逐页 Markdown、页码、表格/图片位置和 SHA256；首次解析及字段匹配均标记未人工核验。
+- 范围：所选 PDF 文件夹及子目录，或 Zotero 集合及全部子集合。Zotero 按 item key 去重，排除回收站、独立附件和独立笔记；DOI/标题的跨条目重复仍需人工审核。
+- Zotero 入口使用 SQLite 只读事务读取一致快照；PDF 文件夹入口不读取 Zotero 数据库。Zotero `attachments:` 链接基目录路径暂未解析。
+- PDF 原件保留在所选文件夹或 Zotero 中，不修改原件。解析缓存保存逐页 Markdown、页码、表格/图片位置和 SHA256；首次解析及字段匹配均标记未人工核验。PDF 模式提供本地文件与页码链接；Zotero 模式继续提供 Zotero 链接。
 - 只有摘要的记录标为 `metadata`；用户笔记与批注明确标记，默认论文搜索不混入个人批注或项目规范。
-- 实验字段是关键词定位的证据目录，而非已经确认的研究分类或自动归一化指标。缺失字段表示尚未定位到证据。
-- `data/reviews/` 保存已对照原文检查的局部方法描述，标明助手核对范围、是否经过人工复核、PDF哈希和原文位置。其状态不扩展到整篇论文；更换PDF后需要重新核对。
+- 实验字段是关键词定位的证据目录，而非已确认的研究分类或自动归一化指标。缺失字段表示尚未定位到证据。
+- `data/reviews/` 保存已对照原文检查的局部方法描述，标明助手核对范围、是否经过人工复核、PDF 哈希和原文位置。其状态不扩展到整篇论文；更换 PDF 后需要重新核对。
 - 原图查看工具 `view_pdf_page` 可核查公式、结构图和表格。公式不保证准确转成 LaTeX；低文本量及疑似图片表格页使用本地 RapidOCR 补充识别，识别文字与位置单独保存并标记需视觉核查。OCR 行文本不作为已恢复的表格列结构。
 - 全文分块遵循章节/页边界，以 E5 tokenizer 控制到 420 tokens、重叠 45 tokens；长表格可能跨块，核对时读取完整页并查看原图。
 - 中英混合检索使用 SQLite FTS5、领域查询扩展、多语言 E5 与 RRF 排序融合。RRF 是排序融合，并非独立神经重排序模型。模型分数不是可信度概率。
@@ -82,30 +126,32 @@ python3 -m venv .venv
 
 ## 更新与复现
 
-代码更新和文库更新分别管理：GitHub 保存程序、工作流和重建材料；`sync` 更新本机知识库。具体提交、推送、跨电脑恢复步骤见 [UPDATING.md](UPDATING.md)。公开仓库的推送和 PR 触发轻量自动检查；文库同步与 Git 推送仍由用户显式执行。
+GitHub 保存程序、工作流和重建材料；`sync` 更新本机知识库。具体提交、推送、跨电脑恢复步骤见 [UPDATING.md](UPDATING.md)。公开仓库的推送和 PR 触发轻量自动检查；文库同步与 Git 推送仍由用户显式执行。
 
-`sync` 手动读取当前集合：PDF 哈希未变时复用解析，文本和模型版本未变时复用向量。新的索引写入独立 generation，全部完成后原子切换 `data/current.json`。构建失败时原有索引继续可用；并发构建通过文件锁拒绝。
+`sync` 手动读取当前配置来源：PDF 哈希未变时复用解析，文本和模型版本未变时复用向量。新的索引写入独立 generation，全部完成后原子切换 `data/current.json`。构建失败时原有索引继续可用；并发构建通过文件锁拒绝。
 
-旧 generation 可作为回滚材料；确认无依赖后再清理。移出集合的条目不会进入新索引；旧版本和缓存仍保留到显式清理。索引是某次快照，`status` 显示完成时间。
+旧 generation 可作为回滚材料；确认无依赖后再清理。移出集合或文件夹的条目不会进入新索引；旧版本和缓存仍保留到显式清理。PDF 文件夹为空时拒绝清空活动索引。索引是某次快照，`status` 显示完成时间。
 
 首次复现：创建独立虚拟环境，安装 `requirements.lock.txt`，运行 `download_model.py` 下载固定 revision 的公开模型，再运行 `sync`。本机 `.venv` 复用了已安装的 PyTorch/NumPy，锁文件包含实际使用版本。
 
 ## 费用和数据边界
 
-本地解析、向量生成和检索不调用云端 API。Codex 接收到检索证据后在当前聊天中分析。后续若增加独立云端全文提取、OCR或生成服务，必须先向用户说明用途和预计费用。
+本地解析、向量生成和检索不调用云端 API。所选客户端接收证据后用自己的模型分析，费用按对应账户计费。本地向量模型与回答模型分开；更换聊天客户端通常无需重建索引。后续若增加独立云端全文提取、OCR 或生成服务，必须先向用户说明用途和预计费用。
 
-`data/`、`models/`、`.venv/`、`config.json` 和本机 `mcp_config.toml` 均被 Git 忽略。原始 PDF 不复制入代码库。文献正文中的指令不执行。
+`data/`、`models/`、`.venv/`、`config.json`、本机 `mcp_config.toml`、PDF 和 `*.pdf.json` 均被 Git 忽略。原始 PDF 不复制入代码库。文献正文中的指令不执行。
 
 ## 验证
 
-新克隆没有私人论文，也可以运行无需文库的配置与记录测试：
+无需私人文库的配置、PDF 导入与记录测试，仅依赖 PyMuPDF 和标准库：
 
 ```bash
-.venv/bin/python -m unittest tests.UnitTests -v
+.venv/bin/python -m unittest tests.UnitTests tests.PDFSourceTests -v
 ```
 
-全库测试与检索开发样例需要本机文献。`evaluation_cases.json` 中的条目 key 属于首期文库；换成其他文库后应建立自己的原文锚点案例。
+安装完整依赖和本地模型后，运行 `.venv/bin/python -m unittest test_pdf_pipeline -v`：在临时克隆中自动生成合成 PDF，检查真实解析、混合检索、增量更新及 MCP 页码/图像工具，不读取 Zotero、不修改当前文库。运行 `.venv/bin/python check_mcp.py` 可检查自己的已建索引。
 
-在本仓库目录运行 `.venv/bin/python validate.py` 完成验证。`tests.py` 检查引用定位、分块 token 上限、来源隔离、实验记录校验和离线检索；`evaluate.py` 检查8个附原文锚点的检索案例；`check_mcp.py` 验证实际MCP工具连接、查询和图像返回。另有22个研究验收问题供实际使用中核对，合计30题，尚未把未核对问题计入准确率。报告保存在 `data/validation/`。自动检查与小样本案例只验证相应范围，全文解析、全部字段及科研建议仍需阅读原文和实际实验验证。
+原始 Zotero 文库可另外运行 `.venv/bin/python validate.py`。其中的全库测试与 `evaluation_cases.json` 使用首期个人文库的条目 key，换文库后应建立自己的原文锚点案例。`evaluate.py` 的8个定向开发样例中，关键词与混合检索均命中8/8，另有22个研究问题未计入准确率；这些检查不衡量回答准确率。报告保存在 `data/validation/`，范围见 [BUILD_REPORT.md](BUILD_REPORT.md)。
+
+贡献入口见 [CONTRIBUTING.md](CONTRIBUTING.md)，计划见 [ROADMAP.md](ROADMAP.md)。
 
 方法依据：[E5 模型卡](https://huggingface.co/intfloat/multilingual-e5-small)、[PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM)、[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)。

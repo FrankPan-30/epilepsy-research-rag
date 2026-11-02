@@ -24,4 +24,4 @@ jobs:
       - name: Install small test dependency
         run: python -m pip install --no-cache-dir pymupdf==1.26.7
       - name: Portable unit tests
-        run: python -m unittest tests.UnitTests -v
+        run: python -m unittest tests.UnitTests tests.PDFSourceTests -v

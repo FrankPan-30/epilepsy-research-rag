@@ -44,6 +44,6 @@ def main():
         print(f"\n{rank}. {row['citation']['title']} [{row['paper_key']}]")
         print(row['text'])
     if not result['results']:print('No matching synthetic notes. Try: alarm, LOPOCV, or model architecture.')
-    print('\nThese are toy notes, not papers or clinical evidence. Add your Zotero collection for real research.')
+    print('\nThese are toy notes, not papers or clinical evidence. Add a PDF folder or Zotero collection for real research.')
 
 if __name__=='__main__':main()
