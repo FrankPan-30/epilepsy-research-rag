@@ -1,17 +1,18 @@
 """Local, source-grounded PDF/Zotero retrieval. No paid APIs or source-file writes."""
 from __future__ import annotations
-import argparse, collections, contextlib, datetime, fcntl, hashlib, html, importlib.metadata
+import argparse, collections, contextlib, datetime, hashlib, html, importlib.metadata
 import json, os, re, sqlite3, sys, tempfile
 from pathlib import Path
+from runtime_support import build_lock
 
 ROOT = Path(__file__).resolve().parent
 WORKSPACE = Path(os.environ.get('RAG_WORKSPACE',str(ROOT))).expanduser().resolve()
 DATA = WORKSPACE / 'data'
 MODEL = ROOT / 'models' / 'multilingual-e5-small'
 def load_config(root=ROOT,settings_root=None):
-    config=json.loads((root/'config.example.json').read_text())
+    config=json.loads((root/'config.example.json').read_text(encoding='utf-8'))
     settings_root=Path(settings_root) if settings_root is not None else root
-    if (settings_root/'config.json').exists():config.update(json.loads((settings_root/'config.json').read_text()))
+    if (settings_root/'config.json').exists():config.update(json.loads((settings_root/'config.json').read_text(encoding='utf-8')))
     config.setdefault('library_source','zotero')  # Existing configurations keep their source.
     if config['library_source'] not in ('zotero','pdf_folder'):raise ValueError('library_source must be zotero or pdf_folder')
     for key in ('zotero_data_dir','pdf_dir'):
@@ -64,7 +65,7 @@ def dumps(x): return json.dumps(x, ensure_ascii=False, indent=2,default=json_geo
 def write_json(path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + '.tmp')
-    tmp.write_text(dumps(obj)); tmp.replace(path)
+    tmp.write_text(dumps(obj),encoding='utf-8'); tmp.replace(path)
 def sha(path):
     h = hashlib.sha256()
     with open(path, 'rb') as f:
@@ -149,7 +150,7 @@ def parse_pdf(a):
     digest = sha(a['path']); dest = DATA / 'parsed' / (a['key']+'.json')
     if a.get('sha256') and a['sha256']!=digest:raise ValueError('PDF changed during inventory; run sync again')
     if dest.exists():
-        cached = json.loads(dest.read_text())
+        cached = json.loads(dest.read_text(encoding='utf-8'))
         if cached['sha256']==digest and cached['parser']==PARSER_VERSION:
             return enrich_layout(a,cached,dest)
     with contextlib.redirect_stdout(sys.stderr):
@@ -161,7 +162,7 @@ def parse_pdf(a):
             page = doc[idx]; text = row['text']
             result['pages'].append({'page':idx+1, 'page_label':page.get_label(), 'text':text, 'tables':row.get('tables',[]), 'images':row.get('images',[]), 'quality':'needs_ocr_or_visual_check' if len(re.sub(r'\s','',text))<100 else 'text_extracted_unreviewed'})
     result=enrich_layout(a,result,dest)
-    (DATA/'parsed'/f"{a['key']}.md").write_text('\n\n'.join(f"<!-- PDF page {p['page']} -->\n{p['text']}" for p in result['pages']))
+    (DATA/'parsed'/f"{a['key']}.md").write_text('\n\n'.join(f"<!-- PDF page {p['page']} -->\n{p['text']}" for p in result['pages']),encoding='utf-8')
     return result
 
 _ocr_engine=None
@@ -231,7 +232,7 @@ _model = None
 def model():
     global _model
     if _model is None:
-        provenance=json.loads((MODEL/'local_provenance.json').read_text())
+        provenance=json.loads((MODEL/'local_provenance.json').read_text(encoding='utf-8'))
         if provenance['repo']!=CFG['embedding_model']:
             raise ValueError('Configured embedding model differs from local weights; install matching model and rebuild')
         from sentence_transformers import SentenceTransformer
@@ -268,8 +269,7 @@ CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT);
 
 def build(skip_vectors=False):
     DATA.mkdir(parents=True,exist_ok=True)
-    with open(WORKSPACE/'.build.lock','w') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with build_lock(WORKSPACE/'.build.lock'):
         papers=inventory()
         from concurrent.futures import ProcessPoolExecutor,as_completed
         attachments={a['key']:a for p in papers for a in p['attachments'] if a['exists']}
@@ -335,14 +335,14 @@ def build(skip_vectors=False):
         for path in sorted((ROOT/'knowledge').glob('*.md')):
             p={'key':'LOCAL:'+path.stem,'title':path.stem,'authors':[],'date':'','doi':'','library_source':'project'}
             db.execute('INSERT INTO papers VALUES(?,?,?)',(p['key'],p['title'],dumps(p)))
-            for section,text in chunks_for(path.read_text(),tokenizer):add(p,{},None,section,'project_guidance',text,'project_rule_not_literature_evidence')
+            for section,text in chunks_for(path.read_text(encoding='utf-8'),tokenizer):add(p,{},None,section,'project_guidance',text,'project_rule_not_literature_evidence')
         manifest['chunks']=len(texts)
         if not skip_vectors:
             import numpy as np
             print(f'Embedding {len(texts)} chunks locally...',file=sys.stderr,flush=True)
             cache=sqlite3.connect(DATA/'embedding_cache.sqlite')
             cache.execute('CREATE TABLE IF NOT EXISTS vectors(hash TEXT PRIMARY KEY, vector BLOB)')
-            revision=json.loads((MODEL/'local_provenance.json').read_text())['revision']
+            revision=json.loads((MODEL/'local_provenance.json').read_text(encoding='utf-8'))['revision']
             hashes=[hashlib.sha256((revision+'\n'+t).encode()).hexdigest() for t in texts]
             cached={r[0]:np.frombuffer(r[1],dtype='float32') for r in cache.execute('SELECT hash,vector FROM vectors')}
             missing=list(dict.fromkeys(h for h in hashes if h not in cached));by_hash=dict(zip(hashes,texts))
@@ -368,11 +368,11 @@ def build(skip_vectors=False):
 class Library:
     def __init__(self,data_dir=None):
         self.data=Path(data_dir).resolve() if data_dir is not None else DATA
-        self.folder=self.data/json.loads((self.data/'current.json').read_text())['generation']
+        self.folder=self.data/json.loads((self.data/'current.json').read_text(encoding='utf-8'))['generation']
         self.db=sqlite3.connect((self.folder/'library.sqlite').as_uri()+'?mode=ro',uri=True,check_same_thread=False)
         self.db.row_factory=sqlite3.Row
         self.vectors=None
-    def status(self):return json.loads((self.folder/'manifest.json').read_text())
+    def status(self):return json.loads((self.folder/'manifest.json').read_text(encoding='utf-8'))
     def evidence(self,row):
         d=dict(row);d['citation']=json.loads(d['citation']);d['generation']=self.folder.name;return d
     def read(self,chunk_id,neighbors=0):
@@ -416,7 +416,7 @@ class Library:
         if mode=='hybrid':
             import numpy as np
             status=self.status()
-            provenance=json.loads((MODEL/'local_provenance.json').read_text())
+            provenance=json.loads((MODEL/'local_provenance.json').read_text(encoding='utf-8'))
             if provenance['revision']!=status['embedding_revision']:
                 raise ValueError('Embedding model revision changed; rebuild index before querying')
             if self.vectors is None:self.vectors=np.load(self.folder/'vectors.npy',mmap_mode='r')
@@ -445,14 +445,14 @@ class Library:
     def paper(self,key):
         r=self.db.execute('SELECT metadata FROM papers WHERE key=?',(key,)).fetchone()
         if r is None:raise ValueError('Unknown paper key')
-        card=next((x for x in json.loads((self.folder/'cards.json').read_text()) if x['paper_key']==key),None)
+        card=next((x for x in json.loads((self.folder/'cards.json').read_text(encoding='utf-8')) if x['paper_key']==key),None)
         reviewed=self.data/'reviews'/(key+'.json')
-        review=json.loads(reviewed.read_text()) if reviewed.exists() else None
+        review=json.loads(reviewed.read_text(encoding='utf-8')) if reviewed.exists() else None
         if review:
-            review['matches_indexed_pdf_version']=all(json.loads((self.data/'parsed'/(x['attachment_key']+'.json')).read_text())['sha256']==x['pdf_sha256'] for x in review['claims'])
+            review['matches_indexed_pdf_version']=all(json.loads((self.data/'parsed'/(x['attachment_key']+'.json')).read_text(encoding='utf-8'))['sha256']==x['pdf_sha256'] for x in review['claims'])
         return {'metadata':json.loads(r[0]),'evidence_map':card,'checked_method_notes':review,'generation':self.folder.name}
     def catalog(self,query='',field=None):
-        cards={c['paper_key']:c for c in json.loads((self.folder/'cards.json').read_text())}
+        cards={c['paper_key']:c for c in json.loads((self.folder/'cards.json').read_text(encoding='utf-8'))}
         if field and field not in FIELDS:raise ValueError('Unknown field')
         out=[]
         for r in self.db.execute('SELECT * FROM papers ORDER BY title'):
@@ -466,7 +466,7 @@ class Library:
         # Resolve only attachments in the indexed collection, never arbitrary paths.
         r=self.db.execute('SELECT citation FROM chunks WHERE attachment_key=? LIMIT 1',(attachment_key,)).fetchone()
         if not r:raise ValueError('Attachment is outside the indexed corpus')
-        cite=json.loads(r[0]);parsed=json.loads((self.data/'parsed'/(attachment_key+'.json')).read_text())
+        cite=json.loads(r[0]);parsed=json.loads((self.data/'parsed'/(attachment_key+'.json')).read_text(encoding='utf-8'))
         if page<1 or page>len(parsed['pages']):raise ValueError('Page out of range')
         cite['pdf_page']=page
         if cite.get('pdf_path'):cite['file_url']=Path(cite['pdf_path']).resolve().as_uri()+f'#page={page}'

@@ -8,13 +8,13 @@ class PDFPipelineTests(unittest.TestCase):
     def test_folder_sync_search_updates_and_mcp_without_zotero(self):
         import pymupdf
         with tempfile.TemporaryDirectory(prefix='pdf-rag-integration-') as temp:
-            root=Path(temp).resolve()/'clone with spaces';root.mkdir()
+            root=Path(temp).resolve()/'文献 clone with spaces';root.mkdir()
             papers=root/'papers';papers.mkdir()
-            for name in ('rag.py','pdf_source.py','configure.py','config.example.json','mcp_server.py','check_mcp.py'):
+            for name in ('rag.py','runtime_support.py','pdf_source.py','configure.py','config.example.json','mcp_server.py','check_mcp.py'):
                 shutil.copy2(rag.ROOT/name,root/name)
             shutil.copytree(rag.ROOT/'knowledge',root/'knowledge')
-            (root/'models').symlink_to(rag.MODEL.parent,target_is_directory=True)
-            (root/'.venv').symlink_to(rag.ROOT/'.venv',target_is_directory=True)
+            if os.name=='nt':shutil.copytree(rag.MODEL.parent,root/'models')
+            else:(root/'models').symlink_to(rag.MODEL.parent,target_is_directory=True)
             original=papers/'a paper.pdf'
             with pymupdf.open() as doc:
                 for text in (
@@ -23,18 +23,18 @@ class PDFPipelineTests(unittest.TestCase):
                     doc.new_page().insert_textbox(pymupdf.Rect(72,72,520,700),text,fontsize=12)
                 doc.set_metadata({'title':'Synthetic alarm protocol fixture','author':'Synthetic Author'})
                 doc.save(original)
-            sidecar=original.with_name(original.name+'.json');sidecar.write_text('{"date":"2024","tags":["synthetic"]}')
+            sidecar=original.with_name(original.name+'.json');sidecar.write_text('{"date":"2024","tags":["synthetic"]}',encoding='utf-8')
             duplicate=papers/'z duplicate.PDF';shutil.copy2(original,duplicate)
-            env={**os.environ,'HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1','PYTHONDONTWRITEBYTECODE':'1'}
+            env={**os.environ,'HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1','PYTHONDONTWRITEBYTECODE':'1','PYTHONUTF8':'1'}
             def run(*args,success=True):
-                result=subprocess.run([sys.executable,*args],cwd=root,env=env,capture_output=True,text=True,timeout=180)
+                result=subprocess.run([sys.executable,*args],cwd=root,env=env,capture_output=True,text=True,encoding='utf-8',timeout=180)
                 if success and result.returncode:self.fail(result.stderr[-8000:])
                 if not success:self.assertNotEqual(result.returncode,0)
                 return result
             run('configure.py','--pdf-dir',str(papers))
             # No Zotero directory is available in this fixture.
-            config=json.loads((root/'config.json').read_text());config['zotero_data_dir']=str(root/'does-not-exist')
-            (root/'config.json').write_text(json.dumps(config))
+            config=json.loads((root/'config.json').read_text(encoding='utf-8'));config['zotero_data_dir']=str(root/'does-not-exist')
+            (root/'config.json').write_text(json.dumps(config),encoding='utf-8')
             inventory=json.loads(run('rag.py','inventory').stdout)
             self.assertEqual(len(inventory),1);key=inventory[0]['key']
             first=json.loads(run('rag.py','sync').stdout)
@@ -73,7 +73,7 @@ class PDFPipelineTests(unittest.TestCase):
             self.assertTrue(any(r['citation'].get('pdf_path')==str(renamed) for r in hits))
             self.assertEqual(json.loads(run('rag.py','inventory').stdout)[0]['key'],key)
             active=(root/'data/current.json').read_bytes();prior_inventory=(root/'data/inventory.json').read_bytes()
-            renamed.with_name(renamed.name+'.json').write_text('{"authors":123}')
+            renamed.with_name(renamed.name+'.json').write_text('{"authors":123}',encoding='utf-8')
             run('rag.py','sync',success=False)
             self.assertEqual((root/'data/current.json').read_bytes(),active)
             self.assertEqual((root/'data/inventory.json').read_bytes(),prior_inventory)

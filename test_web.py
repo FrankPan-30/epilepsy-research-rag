@@ -1,6 +1,6 @@
 """Loopback HTTP checks using synthetic PDFs; no personal data or downloaded models."""
-import json,shutil,sqlite3,tempfile,threading,unittest
-from pathlib import Path
+import contextlib,hashlib,json,shutil,sqlite3,tempfile,threading,unittest
+from pathlib import Path,PureWindowsPath
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError
 from urllib.parse import urlencode
@@ -20,11 +20,12 @@ def seed_index(app,library='web'):
     paper={'key':'PDF-'+digest,'title':'Synthetic alarm paper','authors':['Fixture Author'],'date':'2024','doi':'','library_source':'pdf_folder','collections':['fixtures']}
     attachment={'key':paper['key'],'path':str(path)}
     citation=rag.citation_for(paper,attachment,1,'fulltext');text='Synthetic alarm smoothing threshold evidence for testing. No clinical claims.'
-    with sqlite3.connect(folder/'library.sqlite') as db:
+    with contextlib.closing(sqlite3.connect(folder/'library.sqlite')) as db:
         db.executescript(rag.SCHEMA)
         db.execute('INSERT INTO papers VALUES(?,?,?)',(paper['key'],paper['title'],json.dumps(paper)))
         db.execute('INSERT INTO chunks VALUES(?,?,?,?,?,?,?,?,?)',(1,paper['key'],paper['key'],1,'Methods','fulltext',text,json.dumps(citation),'text_extracted_unreviewed'))
         db.execute('INSERT INTO search(rowid,title,text) VALUES(?,?,?)',(1,paper['title'],text))
+        db.commit()
     rag.write_json(folder/'manifest.json',{'papers':1,'pdfs':1,'pages':2,'failed_pdfs':[]})
     rag.write_json(folder/'cards.json',[{'paper_key':paper['key'],'missing_fulltext':False,'fields':{}}])
     rag.write_json(data/'parsed'/(paper['key']+'.json'),{'sha256':digest,'pages':[{'page':n,'text':text,'quality':'text_extracted_unreviewed'} for n in (1,2)]})
@@ -76,11 +77,23 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(len(list(self.app.uploads.glob('*/*.pdf'))),1)
         self.assertFalse((self.root.parent/'outside.pdf').exists())
         self.assertEqual(list(self.app.workspace.glob('*.upload')),[])
+    def test_windows_reserved_and_unicode_upload_names(self):
+        for filename in ('CON.pdf','NUL.data.pdf','中文 论文.pdf'):
+            with self.subTest(filename=filename):
+                payload=pdf_bytes()+b'\n%'+filename.encode('utf-8')
+                code,body,_=self.upload(payload,name=filename)
+                self.assertEqual(code,200)
+                stored=list((self.app.uploads/hashlib.sha256(payload).hexdigest()).glob('*.pdf'))
+                self.assertEqual(len(stored),1)
+                self.assertFalse(PureWindowsPath(stored[0].name).is_reserved())
+                self.assertEqual(stored[0].read_bytes(),payload)
+                self.assertEqual(list(self.app.workspace.glob('*.upload')),[])
+
     def test_upload_preserves_existing_config_and_index(self):
-        settings=self.root/'config.json';settings.write_text('{"collection_key":"ORIGINAL"}')
+        settings=self.root/'config.json';settings.write_text('{"collection_key":"ORIGINAL"}',encoding='utf-8')
         seed_index(self.app,'existing');pointer=self.root/'data/current.json';before=pointer.read_bytes()
         self.assertEqual(self.upload()[0],200)
-        self.assertEqual(settings.read_text(),'{"collection_key":"ORIGINAL"}')
+        self.assertEqual(settings.read_text(encoding='utf-8'),'{"collection_key":"ORIGINAL"}')
         self.assertEqual(pointer.read_bytes(),before)
         status=json.loads(self.request('/api/status')[1])
         self.assertEqual(status['libraries']['existing']['papers'],1)
@@ -118,7 +131,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(code,400);self.assertIn('请输入',json.loads(body)['error'])
     def test_background_job_isolated_workspace_and_busy_state(self):
         self.upload();self.app.model_ready=lambda:True
-        (self.root/'rag.py').write_text("import os,time\nfrom pathlib import Path\ntime.sleep(.4)\nPath(os.environ['RAG_WORKSPACE'],'job-proof').write_text('isolated')\nprint('done')\n")
+        (self.root/'rag.py').write_text("import os,time\nfrom pathlib import Path,PureWindowsPath\ntime.sleep(.4)\nPath(os.environ['RAG_WORKSPACE'],'job-proof').write_text('isolated')\nprint('中文任务完成')\n",encoding='utf-8')
         self.assertEqual(self.request('/api/jobs?kind=sync','POST')[0],202)
         self.assertEqual(self.request('/api/jobs?kind=sync','POST')[0],409)
         self.assertEqual(self.upload()[0],409)
@@ -126,16 +139,17 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.app.status()['job']['status'],'succeeded')
         self.assertTrue((self.app.workspace/'job-proof').exists())
         self.assertFalse((self.root/'job-proof').exists())
+        self.assertIn('中文任务完成',self.app.status()['job']['log'])
     def test_failed_build_keeps_active_snapshot(self):
         seed_index(self.app);self.upload();self.app.model_ready=lambda:True
         pointer=self.app.workspace/'data/current.json';before=pointer.read_bytes()
-        (self.root/'rag.py').write_text("raise RuntimeError('synthetic failure')\n")
+        (self.root/'rag.py').write_text("raise RuntimeError('synthetic failure')\n",encoding='utf-8')
         self.app.start_job('sync');self.app.worker.join(timeout=10)
         self.assertEqual(self.app.status()['job']['status'],'failed')
         self.assertEqual(pointer.read_bytes(),before)
     def test_isolated_config_uses_source_defaults_without_personal_override(self):
-        (self.root/'config.json').write_text('{"collection_key":"PRIVATE"}')
-        settings=self.root/'alternate';settings.mkdir();(settings/'config.json').write_text('{"library_source":"pdf_folder","pdf_dir":"/tmp/papers"}')
+        (self.root/'config.json').write_text('{"collection_key":"PRIVATE"}',encoding='utf-8')
+        settings=self.root/'alternate';settings.mkdir();(settings/'config.json').write_text('{"library_source":"pdf_folder","pdf_dir":"/tmp/papers"}',encoding='utf-8')
         cfg=rag.load_config(self.root,settings_root=settings)
         self.assertEqual(cfg['library_source'],'pdf_folder')
         self.assertEqual(cfg['collection_key'],'')

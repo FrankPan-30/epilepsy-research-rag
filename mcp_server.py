@@ -11,7 +11,7 @@ def lib():
     # Refresh on atomic generation changes without loading the model again.
     import json
     from rag import DATA
-    gen=json.loads((DATA/'current.json').read_text())['generation']
+    gen=json.loads((DATA/'current.json').read_text(encoding='utf-8'))['generation']
     if _lib is None or _lib.folder.name!=gen:
         if _lib is not None:_lib.db.close()
         _lib=Library()
@@ -55,7 +55,7 @@ def view_pdf_page(attachment_key:str,page:int) -> Image:
     from rag import sha,DATA
     import json
     evidence=lib().page(attachment_key,page)
-    expected=json.loads((DATA/'parsed'/(attachment_key+'.json')).read_text())['sha256']
+    expected=json.loads((DATA/'parsed'/(attachment_key+'.json')).read_text(encoding='utf-8'))['sha256']
     if sha(evidence['citation']['pdf_path'])!=expected:raise ValueError('PDF changed since indexing; run sync before visual verification')
     with pymupdf.open(evidence['citation']['pdf_path']) as doc:
         return Image(data=doc[page-1].get_pixmap(matrix=pymupdf.Matrix(1.5,1.5)).tobytes('png'),format='png')
@@ -65,13 +65,13 @@ def research_workflow(task:str='literature') -> str:
     """Guidance for literature, project, quality, diagnosis, or experiments. These are project rules, not paper claims."""
     allowed={'literature':'文献检索与方法总结','project':'项目知识与实验管理','quality':'数据质量与评价规范','diagnosis':'模型诊断与优化','experiments':'实验设计与结果分析'}
     if task not in allowed:raise ValueError('Unknown task')
-    return (ROOT/'knowledge'/(allowed[task]+'.md')).read_text()
+    return (ROOT/'knowledge'/(allowed[task]+'.md')).read_text(encoding='utf-8')
 
 @mcp.tool(annotations=READ_ONLY)
 def experiment_records() -> list:
     """Read explicitly saved personal experiment records; empty means none have been imported."""
     import json
     from rag import DATA
-    return [json.loads(p.read_text()) for p in sorted((DATA/'experiments').glob('*/current.json'))]
+    return [json.loads(p.read_text(encoding='utf-8')) for p in sorted((DATA/'experiments').glob('*/current.json'))]
 
 if __name__=='__main__':mcp.run(transport='stdio')

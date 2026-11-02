@@ -1,9 +1,10 @@
 """Meaningful checks for corpus provenance, retrieval and persistence boundaries."""
-import json, shutil, tempfile, unittest
+import json, os, shutil, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 import rag, experiments
 import configure
+from runtime_support import venv_python
 import demo
 import pdf_source
 
@@ -21,9 +22,9 @@ class UnitTests(unittest.TestCase):
     def test_config_defaults_and_local_override(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
-            (root/'config.example.json').write_text(json.dumps({'zotero_data_dir':'~/Zotero','collection_name':'default','collection_key':''}))
+            (root/'config.example.json').write_text(json.dumps({'zotero_data_dir':'~/Zotero','collection_name':'default','collection_key':''}),encoding='utf-8')
             self.assertEqual(rag.load_config(root)['collection_name'],'default')
-            (root/'config.json').write_text(json.dumps({'collection_key':'LOCAL123'}))
+            (root/'config.json').write_text(json.dumps({'collection_key':'LOCAL123'}),encoding='utf-8')
             cfg=rag.load_config(root)
             self.assertEqual(cfg['collection_key'],'LOCAL123')
             self.assertEqual(cfg['library_source'],'zotero')
@@ -31,28 +32,29 @@ class UnitTests(unittest.TestCase):
     def test_configure_preserves_existing_settings(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
-            (root/'config.example.json').write_text('{}')
+            (root/'config.example.json').write_text('{}',encoding='utf-8')
             configure.initialize(root,'~/Zotero','my collection','KEY12345')
-            before=(root/'config.json').read_text()
+            before=(root/'config.json').read_text(encoding='utf-8')
             with self.assertRaises(FileExistsError):configure.initialize(root,'/tmp','other')
-            self.assertEqual((root/'config.json').read_text(),before)
+            self.assertEqual((root/'config.json').read_text(encoding='utf-8'),before)
+    @unittest.skipIf(os.name=='nt','POSIX shell quoting; PowerShell launch is tested on Windows')
     def test_mcp_command_handles_spaces_in_clone_path(self):
         import shlex
-        path=Path('/tmp/my research project')
+        path=Path(tempfile.gettempdir())/'my research project'
         args=shlex.split(configure.mcp_command(path))
-        self.assertEqual(args[-2:], [str(path/'.venv/bin/python'),str(path/'mcp_server.py')])
+        self.assertEqual(args[-2:], [str(venv_python(path)),str(path/'mcp_server.py')])
     def test_mcp_client_configs_preserve_launch_and_environment(self):
-        root=Path('/tmp/my research project')
+        root=Path(tempfile.gettempdir())/'my research project'
         for client in ('generic','claude-desktop','cursor','vscode'):
             obj=json.loads(json.dumps(configure.mcp_config(root,client)))
             server=obj['servers' if client=='vscode' else 'mcpServers']['epilepsy_research']
-            self.assertEqual(server['command'],str(root/'.venv/bin/python'))
+            self.assertEqual(server['command'],str(venv_python(root)))
             self.assertEqual(server['args'],[str(root/'mcp_server.py')])
             self.assertEqual(server['env']['HF_HUB_OFFLINE'],'1')
             if client in ('vscode','cursor'):self.assertEqual(server['type'],'stdio')
     def test_configure_pdf_folder_and_existing_config_protection(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);(root/'config.example.json').write_text('{}')
+            root=Path(folder);(root/'config.example.json').write_text('{}',encoding='utf-8')
             configure.initialize(root,pdf_dir=root/'My papers')
             cfg=rag.load_config(root)
             self.assertEqual(cfg['library_source'],'pdf_folder')
@@ -69,7 +71,7 @@ class UnitTests(unittest.TestCase):
             experiments.save(rec)
             with self.assertRaises(ValueError):experiments.save({**rec,'id':'../escape'})
             with self.assertRaises(ValueError):experiments.save({**rec,'status':'completed'})
-            self.assertEqual(json.loads((Path(folder)/'experiments/unit-test/current.json').read_text())['status'],'planned')
+            self.assertEqual(json.loads((Path(folder)/'experiments/unit-test/current.json').read_text(encoding='utf-8'))['status'],'planned')
 
 class PDFSourceTests(unittest.TestCase):
     def setUp(self):
@@ -95,7 +97,7 @@ class PDFSourceTests(unittest.TestCase):
     def test_filename_fallback_and_sidecar_provenance(self):
         path=self.pdf('untitled.pdf')
         self.assertEqual(pdf_source.pdf_inventory(self.root)[0]['title'],'untitled')
-        path.with_name(path.name+'.json').write_text(json.dumps({'title':'Reviewed title','authors':['A. Author'],'date':'2024','doi':'10.example/fixture','tags':['synthetic']}))
+        path.with_name(path.name+'.json').write_text(json.dumps({'title':'Reviewed title','authors':['A. Author'],'date':'2024','doi':'10.example/fixture','tags':['synthetic']}),encoding='utf-8')
         record=pdf_source.pdf_inventory(self.root)[0]
         self.assertEqual(record['title'],'Reviewed title')
         self.assertEqual(record['date'],'2024')
@@ -113,14 +115,14 @@ class PDFSourceTests(unittest.TestCase):
         self.assertNotEqual(pdf_source.pdf_inventory(self.root)[0]['key'],old)
     def test_duplicate_sidecars_merge_and_conflicts_fail(self):
         first=self.pdf('one.pdf');second=self.root/'two.pdf';shutil.copy2(first,second)
-        second.with_name(second.name+'.json').write_text('{"date":"2024"}')
+        second.with_name(second.name+'.json').write_text('{"date":"2024"}',encoding='utf-8')
         self.assertEqual(pdf_source.pdf_inventory(self.root)[0]['date'],'2024')
-        first.with_name(first.name+'.json').write_text('{"date":"2025"}')
+        first.with_name(first.name+'.json').write_text('{"date":"2025"}',encoding='utf-8')
         with self.assertRaisesRegex(ValueError,'Conflicting date'):pdf_source.pdf_inventory(self.root)
     def test_invalid_metadata_does_not_silently_drop_fields(self):
         path=self.pdf('one.pdf');sidecar=path.with_name(path.name+'.json')
         for body in ('bad json','[]','{"authors":"Author"}','{"title":5}','{"pdf_path":"/tmp/elsewhere"}'):
-            sidecar.write_text(body)
+            sidecar.write_text(body,encoding='utf-8')
             with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root)
     def test_missing_empty_hidden_and_symlink_sources(self):
         with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root/'missing')
@@ -128,10 +130,13 @@ class PDFSourceTests(unittest.TestCase):
         self.pdf('.hidden/paper.pdf')
         with self.assertRaises(ValueError):pdf_source.pdf_inventory(self.root)
         outside=self.pdf('outside.pdf');folder=self.root/'selected';folder.mkdir()
-        (folder/'linked.pdf').symlink_to(outside)
+        try:(folder/'linked.pdf').symlink_to(outside)
+        except OSError as exc:
+            if getattr(exc,'winerror',None)==1314:self.skipTest('Creating symlinks requires Windows developer mode')
+            raise
         with self.assertRaises(ValueError):pdf_source.pdf_inventory(folder)
     def test_corrupt_pdf_remains_visible_for_failure_reporting(self):
-        (self.root/'broken.pdf').write_text('Not a PDF')
+        (self.root/'broken.pdf').write_text('Not a PDF',encoding='utf-8')
         paper=pdf_source.pdf_inventory(self.root)[0]
         self.assertIn('metadata_error',paper)
         self.assertTrue(paper['attachments'][0]['exists'])
@@ -153,7 +158,7 @@ class CorpusTests(unittest.TestCase):
     def setUpClass(cls):cls.lib=rag.Library()
     def test_pdf_coverage_and_no_failures(self):
         status=self.lib.status()
-        inventory=json.loads((rag.DATA/'inventory.json').read_text())
+        inventory=json.loads((rag.DATA/'inventory.json').read_text(encoding='utf-8'))
         self.assertEqual(status['papers'],len(inventory))
         self.assertEqual(status['pdfs'],sum(a['exists'] for p in inventory for a in p['attachments']))
         self.assertEqual(status['failed_pdfs'],[])
@@ -167,7 +172,7 @@ class CorpusTests(unittest.TestCase):
         for r in self.lib.db.execute("SELECT * FROM chunks WHERE kind IN ('fulltext','references')"):
             cite=json.loads(r['citation'])
             self.assertTrue(Path(cite['pdf_path']).is_file())
-            parsed=json.loads((rag.DATA/'parsed'/(r['attachment_key']+'.json')).read_text())
+            parsed=json.loads((rag.DATA/'parsed'/(r['attachment_key']+'.json')).read_text(encoding='utf-8'))
             self.assertGreaterEqual(r['page'],1);self.assertLessEqual(r['page'],len(parsed['pages']))
             # Chunk body comes from the corresponding extracted page, barring heading normalization.
             text=parsed['pages'][r['page']-1]['text']

@@ -21,6 +21,6 @@ if __name__=='__main__':
     s.add_parser('template');s.add_parser('list');a=s.add_parser('save');a.add_argument('file',type=Path)
     a=p.parse_args()
     if a.cmd=='template':out=TEMPLATE
-    elif a.cmd=='save':out=save(json.loads(a.file.read_text()))
-    else:out=[json.loads(p.read_text()) for p in sorted((DATA/'experiments').glob('*/current.json'))]
+    elif a.cmd=='save':out=save(json.loads(a.file.read_text(encoding='utf-8')))
+    else:out=[json.loads(p.read_text(encoding='utf-8')) for p in sorted((DATA/'experiments').glob('*/current.json'))]
     print(dumps(out))

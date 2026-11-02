@@ -4,7 +4,7 @@ from rag import ROOT,DATA,Library,write_json,stamp
 
 def evaluate():
     lib=Library();out=[]
-    cases=json.loads((ROOT/'evaluation_cases.json').read_text())
+    cases=json.loads((ROOT/'evaluation_cases.json').read_text(encoding='utf-8'))
     for c in cases:
         page=lib.page(c['attachment'],c['page'])['page']['text']
         anchor_ok=c['anchor'].casefold() in page.casefold()

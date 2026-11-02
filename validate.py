@@ -1,5 +1,5 @@
 """Run checks once and retain a compact reproducible validation report."""
-import json,subprocess,time
+import json,subprocess,sys,time
 from pathlib import Path
 from rag import ROOT,DATA,Library,write_json,stamp
 
@@ -10,8 +10,8 @@ if __name__=='__main__':
     steps=[]
     for name,args in [('tests',['-m','unittest','discover','-s',str(ROOT),'-p','tests.py','-v']),('retrieval',[str(ROOT/'evaluate.py')]),('mcp',[str(ROOT/'check_mcp.py')])]:
         start=time.monotonic()
-        with open(dest/(name+'.log'),'w') as log:
-            run=subprocess.run([str(ROOT/'.venv/bin/python'),*args],stdout=log,stderr=subprocess.STDOUT)
+        with open(dest/(name+'.log'),'w',encoding='utf-8') as log:
+            run=subprocess.run([sys.executable,*args],stdout=log,stderr=subprocess.STDOUT)
         steps.append({'name':name,'exit_code':run.returncode,'seconds':round(time.monotonic()-start,2)})
         print(name,run.returncode,flush=True)
         if run.returncode:raise SystemExit('Check failed; inspect '+str(dest/(name+'.log')))

@@ -1,13 +1,15 @@
 """Create local configuration or print a portable MCP registration command."""
-import argparse,json,shlex
+import argparse,json,os,shlex
 from pathlib import Path
+from runtime_support import venv_python
 
 ROOT=Path(__file__).resolve().parent
 MCP_ENV={'HF_HUB_OFFLINE':'1','TRANSFORMERS_OFFLINE':'1','HF_HUB_DISABLE_TELEMETRY':'1','TOKENIZERS_PARALLELISM':'false'}
 
 def mcp_config(root=ROOT,client='generic'):
     root=Path(root).expanduser().absolute()
-    server={'command':str(root/'.venv/bin/python'),'args':[str(root/'mcp_server.py')],'env':dict(MCP_ENV)}
+    server={'command':str(venv_python(root)),'args':[str(root/'mcp_server.py')],'env':dict(MCP_ENV)}
+    if os.name=='nt':server['env']['PYTHONUTF8']='1'
     if client=='vscode':return {'servers':{'epilepsy_research':{'type':'stdio',**server}}}
     if client=='cursor':server={'type':'stdio',**server}
     if client not in ('generic','claude-desktop','cursor'):raise ValueError('Unknown MCP configuration client')
@@ -18,15 +20,16 @@ def mcp_command(root=ROOT):
     parts=['codex','mcp','add','epilepsy_research']
     for key,value in server['env'].items():parts.extend(['--env',key+'='+value])
     parts.extend(['--',server['command'],*server['args']])
+    if os.name=='nt':return '& '+' '.join("'"+part.replace("'","''")+"'" for part in parts)
     return shlex.join(parts)
 
 def initialize(root,zotero_dir='~/Zotero',collection_name='癫痫预测',collection_key='',pdf_dir=None):
-    config=json.loads((root/'config.example.json').read_text())
+    config=json.loads((root/'config.example.json').read_text(encoding='utf-8'))
     config.update(zotero_data_dir=str(Path(zotero_dir).expanduser().resolve()),collection_name=collection_name,collection_key=collection_key)
     config['library_source']='pdf_folder' if pdf_dir is not None else 'zotero'
     if pdf_dir is not None:config['pdf_dir']=str(Path(pdf_dir).expanduser().resolve())
     # Exclusive creation protects settings on subsequent updates.
-    with (root/'config.json').open('x') as f:json.dump(config,f,ensure_ascii=False,indent=2);f.write('\n')
+    with (root/'config.json').open('x',encoding='utf-8') as f:json.dump(config,f,ensure_ascii=False,indent=2);f.write('\n')
     return root/'config.json'
 
 if __name__=='__main__':

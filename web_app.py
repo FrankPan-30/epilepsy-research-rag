@@ -1,7 +1,8 @@
 """Single-user loopback UI. Uploads use a separate workspace; no hosted service."""
-import argparse,contextlib,hashlib,json,os,re,secrets,signal,subprocess,sys,tempfile,threading,webbrowser
+import argparse,contextlib,hashlib,json,os,re,secrets,subprocess,sys,tempfile,threading,webbrowser
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path,PureWindowsPath
+from runtime_support import child_process_options,stop_process_tree
 from urllib.parse import parse_qs,urlsplit,quote
 import rag
 
@@ -36,7 +37,7 @@ class App:
         self.uploads=self.workspace/'uploads';self.uploads.mkdir(parents=True,exist_ok=True)
         config={**rag.load_config(self.root),'library_source':'pdf_folder','pdf_dir':str(self.uploads)}
         try:
-            with (self.workspace/'config.json').open('x') as file:json.dump(config,file,ensure_ascii=False,indent=2)
+            with (self.workspace/'config.json').open('x',encoding='utf-8') as file:json.dump(config,file,ensure_ascii=False,indent=2)
         except FileExistsError:pass
         self.token=secrets.token_urlsafe(32)
         self.lock=threading.RLock();self.query_lock=threading.RLock()
@@ -79,9 +80,10 @@ class App:
             name=Path(name.replace('\\','/')).name
             if not name.lower().endswith('.pdf'):raise WebError('只支持 PDF 文件。')
             stem=re.sub(r'[\x00-\x1f<>:"|?*]','_',Path(name).stem).strip(' .') or 'paper'
-            stem=stem.encode('utf-8')[:120].decode('utf-8',errors='ignore')
+            stem=stem.encode('utf-8')[:80].decode('utf-8',errors='ignore')
             safe=stem+'.pdf'
-            with tempfile.NamedTemporaryFile(dir=self.workspace,suffix='.upload') as tmp:
+            if PureWindowsPath(safe).is_reserved():safe='_'+safe
+            with tempfile.NamedTemporaryFile(dir=self.workspace,suffix='.upload',delete_on_close=False) as tmp:
                 digest=hashlib.sha256();remaining=length
                 while remaining:
                     block=stream.read(min(1024*1024,remaining))
@@ -117,17 +119,17 @@ class App:
             self.worker=threading.Thread(target=self._run_job,args=(kind,),daemon=True);self.worker.start()
             return dict(self.job)
     def _run_job(self,kind):
-        env={**os.environ,'RAG_WORKSPACE':str(self.workspace),'PYTHONUNBUFFERED':'1','HF_HUB_DISABLE_TELEMETRY':'1'}
+        env={**os.environ,'RAG_WORKSPACE':str(self.workspace),'PYTHONUNBUFFERED':'1','PYTHONUTF8':'1','PYTHONIOENCODING':'utf-8','HF_HUB_DISABLE_TELEMETRY':'1'}
         if kind=='sync':env.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
         else:
             env.pop('HF_HUB_OFFLINE',None);env.pop('TRANSFORMERS_OFFLINE',None)
         args=[sys.executable,str(self.root/('rag.py' if kind=='sync' else 'download_model.py'))]
         if kind=='sync':args.append('sync')
         try:
-            with (self.workspace/'last-job.log').open('w') as log:
+            with (self.workspace/'last-job.log').open('w',encoding='utf-8') as log:
                 with self.lock:
                     if self.closing:raise RuntimeError('应用已停止。')
-                    process=subprocess.Popen(args,cwd=self.root,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,start_new_session=True)
+                    process=subprocess.Popen(args,cwd=self.root,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',**child_process_options())
                     self.process=process
                 for line in process.stdout:
                     log.write(line);log.flush()
@@ -145,20 +147,13 @@ class App:
             with self.lock:self.process=None
     def close(self):
         with self.lock:self.closing=True;process=self.process
-        if process and process.poll() is None:
-            try:os.killpg(process.pid,signal.SIGTERM)
-            except ProcessLookupError:pass
-            try:process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                try:os.killpg(process.pid,signal.SIGKILL)
-                except ProcessLookupError:pass
-                process.wait()
+        if process:stop_process_tree(process)
         if self.worker:self.worker.join(timeout=12)
     def page(self,library,attachment,page,generation):
         if not generation:raise WebError('引用缺少索引版本，请重新检索。',409)
         with self.library(library,generation) as lib:
             result=lib.page(attachment,page)
-            parsed=json.loads((lib.data/'parsed'/(attachment+'.json')).read_text())
+            parsed=json.loads((lib.data/'parsed'/(attachment+'.json')).read_text(encoding='utf-8'))
             path=Path(result['citation']['pdf_path'])
             if rag.sha(path)!=parsed['sha256']:raise WebError('PDF 已变更，请先更新索引再查看原文。',409)
             return result,path,len(parsed['pages'])

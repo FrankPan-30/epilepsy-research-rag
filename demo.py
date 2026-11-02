@@ -15,7 +15,7 @@ NOTES=[
 def run_demo(query='误报后处理中的平滑和阈值',limit=3):
     with tempfile.TemporaryDirectory(prefix='epilepsy-rag-demo-') as temp:
         root=Path(temp);folder=root/'synthetic-demo';folder.mkdir()
-        (root/'current.json').write_text(json.dumps({'generation':folder.name}))
+        (root/'current.json').write_text(json.dumps({'generation':folder.name}),encoding='utf-8')
         db=sqlite3.connect(folder/'library.sqlite');db.executescript(SCHEMA)
         for index,(key,title,text) in enumerate(NOTES,1):
             meta={'key':key,'title':title,'authors':[],'date':'','doi':''}

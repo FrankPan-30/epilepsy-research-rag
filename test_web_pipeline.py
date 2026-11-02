@@ -1,5 +1,5 @@
 """Real upload -> background build -> hybrid search -> page HTTP roundtrip, isolated."""
-import json,shutil,tempfile,threading,time,unittest
+import json,os,shutil,tempfile,threading,time,unittest
 from pathlib import Path
 from urllib.request import Request,urlopen
 from urllib.parse import urlencode
@@ -11,12 +11,13 @@ class WebPipelineTests(unittest.TestCase):
     def test_real_web_import_build_search_and_citation(self):
         import pymupdf
         with tempfile.TemporaryDirectory(prefix='rag-web-pipeline-') as temp:
-            root=Path(temp).resolve()
-            for name in ('rag.py','pdf_source.py','config.example.json'):
+            root=Path(temp).resolve()/'文献 workspace';root.mkdir()
+            for name in ('rag.py','runtime_support.py','pdf_source.py','config.example.json'):
                 shutil.copy2(rag.ROOT/name,root/name)
             shutil.copytree(rag.ROOT/'knowledge',root/'knowledge');shutil.copytree(rag.ROOT/'web',root/'web')
-            (root/'models').symlink_to(rag.MODEL.parent,target_is_directory=True)
-            (root/'config.json').write_text('{"collection_key":"UNCHANGED"}')
+            if os.name=='nt':shutil.copytree(rag.MODEL.parent,root/'models')
+            else:(root/'models').symlink_to(rag.MODEL.parent,target_is_directory=True)
+            (root/'config.json').write_text('{"collection_key":"UNCHANGED"}',encoding='utf-8')
             app=web_app.App(root);seed_index(app,'existing')
             original=(root/'data/current.json').read_bytes()
             server=web_app.make_server(app,0);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -45,7 +46,7 @@ class WebPipelineTests(unittest.TestCase):
                 self.assertNotIn('zotero_url',page['citation'])
                 self.assertTrue(request('/api/image?'+query).startswith(b'\x89PNG'))
                 self.assertEqual(request('/api/pdf?'+query),data)
-                self.assertEqual((root/'config.json').read_text(),'{"collection_key":"UNCHANGED"}')
+                self.assertEqual((root/'config.json').read_text(encoding='utf-8'),'{"collection_key":"UNCHANGED"}')
                 self.assertEqual((root/'data/current.json').read_bytes(),original)
             finally:server.shutdown();server.server_close();app.close();thread.join()
 
